@@ -1,88 +1,82 @@
-# SonoForge Studio Desktop 0.4
+# SonoForge Studio Desktop 0.4.1
 
-La version 0.4 introduit les premieres operations d'edition de clips.
+Cette iteration ajoute le decoupage non destructif au playhead.
 
-## Nouveautes
+## Split au playhead
 
-- selection visuelle d'un clip
-- commandes Dupliquer et Supprimer
-- grille musicale 1/4, 1/8 et 1/16
-- snapping adapte a la subdivision choisie
-- duplication avec conservation du fichier source, du gain, du pan, du Mute, du Solo et de la plage source
-- decalage automatique du duplicata d'une cellule de grille
-- suppression propre de la piste et de sa source dans le mixer
-- preparation du decoupage non destructif
+Procedure :
 
-## Modele non destructif
+1. selectionner un clip
+2. placer le playhead a l'interieur du clip
+3. cliquer sur Couper
 
-Le fichier audio original n'est jamais modifie.
+SonoForge cree alors deux clips independants qui referencent toujours le meme fichier audio original.
 
-Chaque clip possede maintenant :
+Avant :
 
 ```text
-sourceFile
-sourceStart
-sourceEnd
-startOffset
-gain
-pan
-mute
-solo
+sourceStart ------------------------------ sourceEnd
+|                 CLIP                          |
+|-----------------------------------------------|
 ```
 
-La duree visible et lue du clip est :
+Apres une coupe :
 
 ```text
-clipDuration = sourceEnd - sourceStart
+sourceStart ------- split ------- sourceEnd
+|      CLIP A      |    CLIP B        |
+|------------------|------------------|
 ```
 
-La position de fin dans le projet est :
+Le clip A conserve le meme startOffset.
+
+Le clip B commence exactement a la position du playhead dans le projet.
+
+## Donnees non destructives
+
+Aucun fichier audio n'est reecrit.
+
+Pour le clip gauche :
 
 ```text
-projectEnd = startOffset + clipDuration
+sourceStart = ancien sourceStart
+sourceEnd   = split
 ```
 
-Cette structure permet d'ajouter ensuite Split, Trim et redimensionnement sans reecrire les fichiers audio.
-
-## Grille musicale
-
-Pour un BPM donne :
+Pour le clip droit :
 
 ```text
-1/4  = 60 / BPM
-1/8  = (60 / BPM) / 2
-1/16 = (60 / BPM) / 4
+sourceStart = split
+sourceEnd   = ancien sourceEnd
+startOffset = position du playhead
 ```
 
-Exemple a 120 BPM :
+Les reglages gain, pan, Mute et Solo sont recopies sur le clip droit.
 
-```text
-1/4  = 0.500 s
-1/8  = 0.250 s
-1/16 = 0.125 s
-```
+## Protection
+
+La commande Couper n'est active que lorsque le playhead se trouve reellement a l'interieur du clip selectionne. Une marge minimale de 10 ms evite la creation accidentelle de fragments quasi nuls.
 
 ## Fonctions conservees
 
 - transport global
 - clips deplacables
+- selection / duplication / suppression
+- grille 1/4, 1/8, 1/16
+- BPM et snapping
 - Play / Pause / Stop
 - seek
 - waveforms
-- zoom 1x a 8x
-- navigation temporelle
-- BPM 40 a 240
+- zoom et navigation
 - volume / pan / Mute / Solo
 - Master
-- configuration audio
 
 ## Prochaine iteration
 
-- Split au playhead
-- trim gauche / droite
-- selection multiple
+- trim gauche et droite par glisser
 - undo / redo
 - sauvegarde de projet
+- selection multiple
 - enregistrement audio
 
 ## Compilation Windows

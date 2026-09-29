@@ -180,6 +180,75 @@ juce::Result AudioEngine::duplicateTrack(
     return juce::Result::ok();
 }
 
+juce::Result AudioEngine::splitTrackAtProjectPosition(
+    AudioTrack& sourceTrack,
+    const double projectPositionSeconds,
+    AudioTrack*& rightTrack
+)
+{
+    rightTrack = nullptr;
+
+    const auto clipStart =
+        sourceTrack.getStartOffsetSeconds();
+
+    const auto clipDuration =
+        sourceTrack.getClipDurationSeconds();
+
+    const auto clipEnd =
+        clipStart + clipDuration;
+
+    constexpr double minimumFragmentSeconds = 0.01;
+
+    if (projectPositionSeconds
+            <= clipStart + minimumFragmentSeconds
+        || projectPositionSeconds
+            >= clipEnd - minimumFragmentSeconds)
+    {
+        return juce::Result::fail(
+            "Placez le playhead a l'interieur du clip, loin de ses bords."
+        );
+    }
+
+    const auto sourceSplit =
+        sourceTrack.getSourceStartSeconds()
+        + (projectPositionSeconds - clipStart);
+
+    const auto originalSourceEnd =
+        sourceTrack.getSourceEndSeconds();
+
+    const auto result = addTrackFromFile(
+        sourceTrack.getSourceFile(),
+        rightTrack
+    );
+
+    if (result.failed() || rightTrack == nullptr)
+        return result;
+
+    rightTrack->setStartOffsetSeconds(
+        projectPositionSeconds
+    );
+
+    rightTrack->setSourceRange(
+        sourceSplit,
+        originalSourceEnd
+    );
+
+    rightTrack->setGain(sourceTrack.getGain());
+    rightTrack->setPan(sourceTrack.getPan());
+    rightTrack->setMuted(sourceTrack.isMuted());
+    rightTrack->setSolo(sourceTrack.isSolo());
+
+    sourceTrack.setSourceRange(
+        sourceTrack.getSourceStartSeconds(),
+        sourceSplit
+    );
+
+    refreshSoloState();
+    refreshTrackAlignment();
+
+    return juce::Result::ok();
+}
+
 bool AudioEngine::removeTrack(AudioTrack* trackToRemove)
 {
     if (trackToRemove == nullptr)
