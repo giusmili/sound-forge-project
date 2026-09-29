@@ -13,7 +13,7 @@ public:
 
     const juce::String getApplicationVersion() override
     {
-        return "0.6.0";
+        return "0.7.0";
     }
 
     bool moreThanOneInstanceAllowed() override
@@ -36,6 +36,12 @@ public:
 
     void systemRequestedQuit() override
     {
+        if (mainWindow != nullptr)
+        {
+            mainWindow->requestSafeQuit();
+            return;
+        }
+
         quit();
     }
 
@@ -67,6 +73,11 @@ private:
         }
 
         void closeButtonPressed() override
+        {
+            requestSafeQuit();
+        }
+
+        void requestSafeQuit()
         {
             if (auto* mainComponent =
                     dynamic_cast<MainComponent*>(

@@ -1,104 +1,115 @@
-# SonoForge Studio Desktop 0.6
+# SonoForge Studio Desktop 0.7
 
-Cette iteration ajoute le premier enregistrement audio natif de SonoForge.
+Cette iteration integre les premiers retours de test utilisateur sur l'ergonomie generale et les types de pistes.
 
-## Enregistrement audio
+## Fermeture et menus
 
-Le bouton Record utilise l'entree audio active du systeme.
-
-Au demarrage :
-
-- SonoForge memorise la position du playhead
-- la lecture des pistes existantes continue
-- l'entree audio est ecrite dans un fichier WAV 24 bits
-- l'ecriture disque est effectuee par un ThreadedWriter en arriere-plan
-- l'horloge projet continue d'avancer pendant l'enregistrement
-
-A l'arret :
-
-- le fichier WAV est finalise
-- le fichier est importe automatiquement comme nouvelle piste
-- le clip est place a la position exacte de depart de l'enregistrement
-- l'action peut etre annulee avec Undo
-
-## Dossiers d'enregistrement
-
-Pour un projet deja sauvegarde :
+SonoForge dispose maintenant d'une barre de menus standard :
 
 ```text
-MonProjet/
-├── MonProjet.sonoforge
-└── Audio/
-    └── Recording_<timestamp>.wav
+Fichier
+  Ouvrir projet...
+  Enregistrer
+  Importer audio...
+  Quitter
+
+Edition
+  Annuler
+  Retablir
+
+Piste
+  Ajouter piste audio...
+  Ajouter piste MIDI / Instrument
+  Configuration audio...
 ```
 
-Pour une session sans fichier projet :
+Le bouton Quitter est egalement visible dans l'interface.
+
+Toutes les voies de fermeture utilisent la fermeture securisee :
+
+- bouton X de Windows
+- menu Fichier > Quitter
+- bouton Quitter
+- demande de fermeture du systeme
+
+Si le projet contient des changements non enregistres, SonoForge propose Enregistrer, Ne pas enregistrer ou Annuler.
+
+## Ajout de pistes
+
+Deux acces directs sont disponibles :
 
 ```text
-Documents/
-└── SonoForge Recordings/
-    └── Recording_<timestamp>.wav
++ Audio
++ MIDI
 ```
 
-## Configuration audio
+### Piste Audio
 
-SonoForge tente maintenant d'ouvrir :
++ Audio ouvre le selecteur de fichiers audio et ajoute les fichiers choisis comme pistes audio.
 
-- 1 canal d'entree
-- 2 canaux de sortie
+L'enregistrement microphone/interface reste disponible avec Record.
 
-Si aucune entree n'est disponible, l'application retombe sur la configuration de lecture seule.
+### Piste MIDI / Instrument
 
-La fenetre Audio permet desormais de choisir jusqu'a 2 canaux d'entree et 2 canaux de sortie.
++ MIDI cree une vraie piste instrument dans le moteur audio.
 
-## Architecture temps reel
+La premiere implementation contient :
 
-La lecture et l'enregistrement passent par un callback audio commun :
+- nom de piste Instrument N
+- instrument interne Basic Synth
+- volume
+- Mute
+- bouton Tester C4
+- suppression individuelle
+- mixage dans le Master
+- sauvegarde/restauration dans le projet
+
+Le bouton Tester C4 permet de verifier immediatement que la piste instrument produit du son.
+
+Le piano roll, les clips MIDI, l'entree clavier MIDI et les VST3 seront ajoutes dans les iterations suivantes.
+
+## Format projet
+
+Les nouveaux projets utilisent :
 
 ```text
-Audio Device
-     |
-     +--> Input --> ThreadedWriter --> WAV
-     |
-     +--> AudioEngine --> Mixer --> Output
+SonoForgeProject
+formatVersion = 2
+appVersion = 0.7.0
 ```
 
-Le thread audio ne realise pas directement les ecritures disque.
+Le formatVersion 2 ajoute les pistes MIDI / Instrument.
 
-## Limitations 0.6
+Les projets formatVersion 1 restent compatibles en lecture.
 
-- une seule prise enregistree a la fois
-- pas encore d'armement individuel par piste
-- pas encore de monitoring d'entree configurable
-- pas encore de compteur dB d'entree
-- pas encore de pre-roll
-- pas encore de punch in/out
-- latence a valider sur materiel Windows reel
-- ASIO non encore integre
+## Fonctions deja disponibles
 
-## Fonctions conservees
-
+- lecture multipiste audio
+- enregistrement audio natif
+- Play / Pause / Stop
 - fermeture securisee
 - projets recents
 - autosave / backup / recovery
 - sauvegarde .sonoforge
 - Undo / Redo
-- transport global
-- clips deplacables
 - Split / Trim
-- grille musicale
+- duplication / suppression
+- grille 1/4, 1/8, 1/16
 - BPM / snapping
+- waveforms
+- zoom et navigation
 - volume / pan / Mute / Solo
 - Master
+- piste MIDI / Instrument avec Basic Synth
 
-## Prochaine iteration
+## Prochaine iteration MIDI
 
-- armement d'une piste
-- vumetre d'entree
-- selection mono/stereo
-- monitoring
-- test de latence
-- puis ASIO
+- clips MIDI
+- piano roll
+- creation et edition de notes
+- clavier MIDI externe
+- choix d'instrument
+- puis hebergement VST3
 
 ## Compilation Windows
 

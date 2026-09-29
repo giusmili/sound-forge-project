@@ -41,6 +41,7 @@ AudioEngine::~AudioEngine()
     const juce::ScopedLock lock(trackLock);
     mixer.removeAllInputs();
     tracks.clear();
+    midiTracks.clear();
 }
 
 void AudioEngine::audioDeviceIOCallbackWithContext(
@@ -375,6 +376,61 @@ bool AudioEngine::removeTrack(AudioTrack* trackToRemove)
     return true;
 }
 
+MidiInstrumentTrack*
+AudioEngine::addMidiInstrumentTrack(
+    const juce::String& name
+)
+{
+    auto track =
+        std::make_unique<MidiInstrumentTrack>(
+            name.isNotEmpty()
+                ? name
+                : "Instrument"
+        );
+
+    const juce::ScopedLock lock(trackLock);
+
+    auto* createdTrack = track.get();
+    midiTracks.push_back(std::move(track));
+    mixer.addInputSource(createdTrack, false);
+
+    return createdTrack;
+}
+
+bool AudioEngine::removeMidiInstrumentTrack(
+    MidiInstrumentTrack* trackToRemove
+)
+{
+    if (trackToRemove == nullptr)
+        return false;
+
+    const juce::ScopedLock lock(trackLock);
+
+    const auto iterator = std::find_if(
+        midiTracks.begin(),
+        midiTracks.end(),
+        [trackToRemove](const auto& track)
+        {
+            return track.get() == trackToRemove;
+        }
+    );
+
+    if (iterator == midiTracks.end())
+        return false;
+
+    mixer.removeInputSource(trackToRemove);
+    midiTracks.erase(iterator);
+
+    if (tracks.empty()
+        && midiTracks.empty())
+    {
+        playing.store(false);
+        projectPositionSeconds.store(0.0);
+    }
+
+    return true;
+}
+
 std::vector<AudioEngine::TrackState>
 AudioEngine::captureTrackStates() const
 {
@@ -401,14 +457,38 @@ AudioEngine::captureTrackStates() const
     return states;
 }
 
-juce::Result AudioEngine::restoreTrackStates(
-    const std::vector<TrackState>& states
+std::vector<AudioEngine::MidiTrackState>
+AudioEngine::captureMidiTrackStates() const
+{
+    const juce::ScopedLock lock(trackLock);
+
+    std::vector<MidiTrackState> states;
+    states.reserve(midiTracks.size());
+
+    for (const auto& track : midiTracks)
+    {
+        MidiTrackState state;
+        state.name = track->getName();
+        state.gain = track->getGain();
+        state.muted = track->isMuted();
+        state.instrumentId =
+            track->getInstrumentId();
+
+        states.push_back(std::move(state));
+    }
+
+    return states;
+}
+
+juce::Result AudioEngine::restoreProjectTracks(
+    const std::vector<TrackState>& audioStates,
+    const std::vector<MidiTrackState>& midiStates
 )
 {
     std::vector<std::unique_ptr<AudioTrack>> rebuiltTracks;
-    rebuiltTracks.reserve(states.size());
+    rebuiltTracks.reserve(audioStates.size());
 
-    for (const auto& state : states)
+    for (const auto& state : audioStates)
     {
         std::unique_ptr<juce::AudioFormatReader> reader(
             formatManager.createReaderFor(state.sourceFile)
@@ -452,15 +532,40 @@ juce::Result AudioEngine::restoreTrackStates(
         rebuiltTracks.push_back(std::move(track));
     }
 
+    std::vector<std::unique_ptr<MidiInstrumentTrack>>
+        rebuiltMidiTracks;
+
+    rebuiltMidiTracks.reserve(midiStates.size());
+
+    for (const auto& state : midiStates)
+    {
+        auto track =
+            std::make_unique<MidiInstrumentTrack>(
+                state.name
+            );
+
+        track->setGain(state.gain);
+        track->setMuted(state.muted);
+
+        rebuiltMidiTracks.push_back(
+            std::move(track)
+        );
+    }
+
     const juce::ScopedLock lock(trackLock);
 
     playing.store(false);
     mixer.removeAllInputs();
     tracks.clear();
+    midiTracks.clear();
 
     tracks = std::move(rebuiltTracks);
+    midiTracks = std::move(rebuiltMidiTracks);
 
     for (auto& track : tracks)
+        mixer.addInputSource(track.get(), false);
+
+    for (auto& track : midiTracks)
         mixer.addInputSource(track.get(), false);
 
     refreshSoloStateUnlocked();
@@ -478,6 +583,16 @@ juce::Result AudioEngine::restoreTrackStates(
     return juce::Result::ok();
 }
 
+juce::Result AudioEngine::restoreTrackStates(
+    const std::vector<TrackState>& states
+)
+{
+    return restoreProjectTracks(
+        states,
+        {}
+    );
+}
+
 std::vector<AudioTrack*> AudioEngine::getTrackPointers() const
 {
     const juce::ScopedLock lock(trackLock);
@@ -486,6 +601,20 @@ std::vector<AudioTrack*> AudioEngine::getTrackPointers() const
     result.reserve(tracks.size());
 
     for (const auto& track : tracks)
+        result.push_back(track.get());
+
+    return result;
+}
+
+std::vector<MidiInstrumentTrack*>
+AudioEngine::getMidiTrackPointers() const
+{
+    const juce::ScopedLock lock(trackLock);
+
+    std::vector<MidiInstrumentTrack*> result;
+    result.reserve(midiTracks.size());
+
+    for (const auto& track : midiTracks)
         result.push_back(track.get());
 
     return result;
@@ -729,7 +858,10 @@ double AudioEngine::getLengthSeconds() const
 int AudioEngine::getTrackCount() const noexcept
 {
     const juce::ScopedLock lock(trackLock);
-    return static_cast<int>(tracks.size());
+
+    return static_cast<int>(
+        tracks.size() + midiTracks.size()
+    );
 }
 
 juce::AudioDeviceManager& AudioEngine::getDeviceManager() noexcept

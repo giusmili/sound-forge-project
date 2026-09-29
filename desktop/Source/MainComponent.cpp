@@ -13,15 +13,29 @@ constexpr int trackRowHeight = 112;
 constexpr double minimumSplitMarginSeconds = 0.01;
 constexpr auto maxHistoryEntries = 50U;
 constexpr double autosaveIntervalMs = 30000.0;
+
+constexpr int menuOpenProject = 1001;
+constexpr int menuSaveProject = 1002;
+constexpr int menuImportAudio = 1003;
+constexpr int menuQuit = 1009;
+
+constexpr int menuUndo = 2001;
+constexpr int menuRedo = 2002;
+
+constexpr int menuAddAudioTrack = 3001;
+constexpr int menuAddMidiTrack = 3002;
+constexpr int menuAudioSettings = 3003;
 }
 
 MainComponent::MainComponent()
 {
     setOpaque(true);
-    setSize(1320, 820);
+    setSize(1320, 860);
+
+    addAndMakeVisible(menuBar);
 
     titleLabel.setText(
-        "SonoForge Studio 0.6",
+        "SonoForge Studio 0.7",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -78,6 +92,8 @@ MainComponent::MainComponent()
              &saveProjectButton,
              &recoverButton,
              &openButton,
+             &midiTrackButton,
+             &quitButton,
              &undoButton,
              &redoButton,
              &duplicateButton,
@@ -237,6 +253,25 @@ MainComponent::MainComponent()
         openAudioFiles();
     };
 
+    midiTrackButton.onClick = [this]
+    {
+        addMidiInstrumentTrack();
+    };
+
+    quitButton.onClick = [this]
+    {
+        requestApplicationQuit(
+            []
+            {
+                if (auto* application =
+                        juce::JUCEApplication::getInstance())
+                {
+                    application->quit();
+                }
+            }
+        );
+    };
+
     undoButton.onClick = [this]
     {
         undo();
@@ -363,7 +398,7 @@ void MainComponent::paint(juce::Graphics& graphics)
 
     auto panel = getLocalBounds()
                      .reduced(20)
-                     .withTrimmedTop(76);
+                     .withTrimmedTop(106);
 
     graphics.setColour(juce::Colour(panelColour));
     graphics.fillRoundedRectangle(
@@ -376,15 +411,24 @@ void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced(20);
 
+    menuBar.setBounds(
+        area.removeFromTop(26)
+    );
+
+    area.removeFromTop(4);
+
     auto header = area.removeFromTop(52);
     titleLabel.setBounds(
         header.removeFromLeft(360)
+    );
+    quitButton.setBounds(
+        header.removeFromRight(82).reduced(4)
     );
     audioSettingsButton.setBounds(
         header.removeFromRight(100).reduced(4)
     );
     recentProjectsCombo.setBounds(
-        header.removeFromRight(260).reduced(4)
+        header.removeFromRight(240).reduced(4)
     );
 
     area.removeFromTop(24);
@@ -401,7 +445,10 @@ void MainComponent::resized()
         importRow.removeFromLeft(100).reduced(4)
     );
     openButton.setBounds(
-        importRow.removeFromLeft(140).reduced(4)
+        importRow.removeFromLeft(92).reduced(4)
+    );
+    midiTrackButton.setBounds(
+        importRow.removeFromLeft(92).reduced(4)
     );
     importRow.removeFromLeft(8);
     projectLabel.setBounds(
@@ -506,6 +553,136 @@ void MainComponent::resized()
     trackViewport.setBounds(area);
 
     layoutTracks();
+}
+
+juce::StringArray MainComponent::getMenuBarNames()
+{
+    return {
+        "Fichier",
+        "Edition",
+        "Piste"
+    };
+}
+
+juce::PopupMenu MainComponent::getMenuForIndex(
+    const int topLevelMenuIndex,
+    const juce::String&
+)
+{
+    juce::PopupMenu menu;
+
+    if (topLevelMenuIndex == 0)
+    {
+        menu.addItem(
+            menuOpenProject,
+            "Ouvrir projet...",
+            ! audioEngine.isRecording()
+        );
+        menu.addItem(
+            menuSaveProject,
+            "Enregistrer",
+            true
+        );
+        menu.addSeparator();
+        menu.addItem(
+            menuImportAudio,
+            "Importer audio...",
+            ! audioEngine.isRecording()
+        );
+        menu.addSeparator();
+        menu.addItem(
+            menuQuit,
+            "Quitter"
+        );
+    }
+    else if (topLevelMenuIndex == 1)
+    {
+        menu.addItem(
+            menuUndo,
+            "Annuler",
+            ! undoStack.empty()
+        );
+        menu.addItem(
+            menuRedo,
+            "Retablir",
+            ! redoStack.empty()
+        );
+    }
+    else if (topLevelMenuIndex == 2)
+    {
+        menu.addItem(
+            menuAddAudioTrack,
+            "Ajouter piste audio...",
+            ! audioEngine.isRecording()
+        );
+        menu.addItem(
+            menuAddMidiTrack,
+            "Ajouter piste MIDI / Instrument",
+            ! audioEngine.isRecording()
+        );
+        menu.addSeparator();
+        menu.addItem(
+            menuAudioSettings,
+            "Configuration audio...",
+            ! audioEngine.isRecording()
+        );
+    }
+
+    return menu;
+}
+
+void MainComponent::menuItemSelected(
+    const int menuItemID,
+    const int
+)
+{
+    switch (menuItemID)
+    {
+        case menuOpenProject:
+            openProject();
+            break;
+
+        case menuSaveProject:
+            saveProject();
+            break;
+
+        case menuImportAudio:
+        case menuAddAudioTrack:
+            openAudioFiles();
+            break;
+
+        case menuUndo:
+            undo();
+            break;
+
+        case menuRedo:
+            redo();
+            break;
+
+        case menuAddMidiTrack:
+            addMidiInstrumentTrack();
+            break;
+
+        case menuAudioSettings:
+            showAudioSettings();
+            break;
+
+        case menuQuit:
+            requestApplicationQuit(
+                []
+                {
+                    if (auto* application =
+                            juce::JUCEApplication::getInstance())
+                    {
+                        application->quit();
+                    }
+                }
+            );
+            break;
+
+        default:
+            break;
+    }
 }
 
 void MainComponent::requestApplicationQuit(
@@ -1115,8 +1292,8 @@ juce::var MainComponent::serialiseSnapshot(
     auto* root = new juce::DynamicObject();
 
     root->setProperty("format", "SonoForgeProject");
-    root->setProperty("formatVersion", 1);
-    root->setProperty("appVersion", "0.6.0");
+    root->setProperty("formatVersion", 2);
+    root->setProperty("appVersion", "0.7.0");
     root->setProperty(
         "positionSeconds",
         snapshot.positionSeconds
@@ -1177,6 +1354,28 @@ juce::var MainComponent::serialiseSnapshot(
         juce::var(tracks)
     );
 
+    juce::Array<juce::var> midiTracks;
+
+    for (const auto& state : snapshot.midiTracks)
+    {
+        auto* track = new juce::DynamicObject();
+
+        track->setProperty("name", state.name);
+        track->setProperty("gain", state.gain);
+        track->setProperty("muted", state.muted);
+        track->setProperty(
+            "instrumentId",
+            state.instrumentId
+        );
+
+        midiTracks.add(juce::var(track));
+    }
+
+    root->setProperty(
+        "midiTracks",
+        juce::var(midiTracks)
+    );
+
     return juce::var(root);
 }
 
@@ -1209,7 +1408,7 @@ juce::Result MainComponent::deserialiseSnapshot(
             root->getProperty("formatVersion")
         );
 
-    if (formatVersion != 1)
+    if (formatVersion < 1 || formatVersion > 2)
     {
         return juce::Result::fail(
             "Version de projet non prise en charge : "
@@ -1349,12 +1548,68 @@ juce::Result MainComponent::deserialiseSnapshot(
         );
     }
 
+    snapshot.midiTracks.clear();
+
+    if (formatVersion >= 2)
+    {
+        const auto midiTracksValue =
+            root->getProperty("midiTracks");
+
+        if (const auto* midiTracks =
+                midiTracksValue.getArray())
+        {
+            snapshot.midiTracks.reserve(
+                static_cast<size_t>(
+                    midiTracks->size()
+                )
+            );
+
+            for (const auto& value : *midiTracks)
+            {
+                const auto* track =
+                    value.getDynamicObject();
+
+                if (track == nullptr)
+                {
+                    return juce::Result::fail(
+                        "Une piste MIDI du projet est invalide."
+                    );
+                }
+
+                AudioEngine::MidiTrackState state;
+                state.name =
+                    track->getProperty("name")
+                        .toString();
+                state.gain =
+                    static_cast<float>(
+                        static_cast<double>(
+                            track->getProperty("gain")
+                        )
+                    );
+                state.muted =
+                    static_cast<bool>(
+                        track->getProperty("muted")
+                    );
+                state.instrumentId =
+                    static_cast<int>(
+                        track->getProperty(
+                            "instrumentId"
+                        )
+                    );
+
+                snapshot.midiTracks.push_back(
+                    std::move(state)
+                );
+            }
+        }
+    }
+
     return juce::Result::ok();
 }
 
 void MainComponent::updateProjectTitle()
 {
-    auto text = juce::String("SonoForge Studio 0.6");
+    auto text = juce::String("SonoForge Studio 0.7");
 
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
@@ -1402,6 +1657,15 @@ juce::String MainComponent::makeSnapshotFingerprint(
             << "|pan=" << juce::String(state.pan, 6)
             << "|mute=" << juce::String(state.muted ? 1 : 0)
             << "|solo=" << juce::String(state.solo ? 1 : 0);
+    }
+
+    for (const auto& state : snapshot.midiTracks)
+    {
+        fingerprint
+            << "|midiName=" << state.name
+            << "|midiGain=" << juce::String(state.gain, 6)
+            << "|midiMute=" << juce::String(state.muted ? 1 : 0)
+            << "|instrument=" << juce::String(state.instrumentId);
     }
 
     return fingerprint;
@@ -1557,6 +1821,76 @@ TrackRowComponent* MainComponent::addTrackRow(
     return row;
 }
 
+MidiTrackRowComponent*
+MainComponent::addMidiTrackRow(
+    MidiInstrumentTrack& track
+)
+{
+    auto* row = midiTrackRows.add(
+        new MidiTrackRowComponent(track)
+    );
+
+    row->onChanged = [this]
+    {
+        updateProjectTitle();
+    };
+
+    row->onDeleteRequested =
+        [this](MidiTrackRowComponent* rowToDelete)
+        {
+            deleteMidiTrackRow(rowToDelete);
+        };
+
+    trackList.addAndMakeVisible(row);
+    layoutTracks();
+
+    return row;
+}
+
+void MainComponent::addMidiInstrumentTrack()
+{
+    if (audioEngine.isRecording())
+        return;
+
+    const auto before = captureSnapshot();
+
+    const auto trackNumber =
+        audioEngine.getMidiTrackPointers().size() + 1;
+
+    auto* track =
+        audioEngine.addMidiInstrumentTrack(
+            "Instrument "
+            + juce::String(
+                static_cast<int>(trackNumber)
+            )
+        );
+
+    if (track == nullptr)
+        return;
+
+    addMidiTrackRow(*track);
+    pushUndoSnapshot(before);
+    updateProjectState();
+}
+
+void MainComponent::deleteMidiTrackRow(
+    MidiTrackRowComponent* row
+)
+{
+    if (row == nullptr)
+        return;
+
+    const auto before = captureSnapshot();
+    auto* track = &row->getTrack();
+
+    if (! audioEngine.removeMidiInstrumentTrack(track))
+        return;
+
+    midiTrackRows.removeObject(row, true);
+    pushUndoSnapshot(before);
+    updateProjectState();
+}
+
 void MainComponent::layoutTracks()
 {
     const auto width =
@@ -1565,7 +1899,8 @@ void MainComponent::layoutTracks()
     const auto height =
         juce::jmax(
             trackViewport.getHeight(),
-            trackRows.size() * trackRowHeight
+            (trackRows.size() + midiTrackRows.size())
+                * trackRowHeight
         );
 
     trackList.setSize(width, height);
@@ -1573,6 +1908,18 @@ void MainComponent::layoutTracks()
     int y = 0;
 
     for (auto* row : trackRows)
+    {
+        row->setBounds(
+            0,
+            y,
+            width,
+            trackRowHeight - 6
+        );
+
+        y += trackRowHeight;
+    }
+
+    for (auto* row : midiTrackRows)
     {
         row->setBounds(
             0,
@@ -1815,11 +2162,19 @@ void MainComponent::rebuildTrackRowsFromEngine()
 {
     selectedRow = nullptr;
     trackRows.clear(true);
+    midiTrackRows.clear(true);
 
     for (auto* track : audioEngine.getTrackPointers())
     {
         if (track != nullptr)
             addTrackRow(*track);
+    }
+
+    for (auto* track :
+         audioEngine.getMidiTrackPointers())
+    {
+        if (track != nullptr)
+            addMidiTrackRow(*track);
     }
 }
 
@@ -1828,6 +2183,8 @@ MainComponent::captureSnapshot() const
 {
     ProjectSnapshot snapshot;
     snapshot.tracks = audioEngine.captureTrackStates();
+    snapshot.midiTracks =
+        audioEngine.captureMidiTrackStates();
     snapshot.positionSeconds =
         audioEngine.getPositionSeconds();
     snapshot.bpm = bpmSlider.getValue();
@@ -1860,7 +2217,10 @@ bool MainComponent::restoreSnapshot(
     audioEngine.pause();
 
     const auto result =
-        audioEngine.restoreTrackStates(snapshot.tracks);
+        audioEngine.restoreProjectTracks(
+            snapshot.tracks,
+            snapshot.midiTracks
+        );
 
     if (result.failed())
     {
