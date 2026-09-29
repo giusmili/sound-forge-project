@@ -25,9 +25,10 @@ public:
     void setPositionSeconds(double seconds);
     void setMasterGain(float gain);
     void refreshSoloState();
+    void refreshTrackAlignment();
 
-    [[nodiscard]] bool isPlaying() const;
-    [[nodiscard]] double getPositionSeconds() const;
+    [[nodiscard]] bool isPlaying() const noexcept;
+    [[nodiscard]] double getPositionSeconds() const noexcept;
     [[nodiscard]] double getLengthSeconds() const;
     [[nodiscard]] int getTrackCount() const noexcept;
 
@@ -36,12 +37,20 @@ public:
     juce::AudioThumbnailCache& getThumbnailCache() noexcept;
 
 private:
+    [[nodiscard]] double getLengthSecondsUnlocked() const;
+    void syncTracksUnlocked(double projectPosition, bool projectPlaying);
+
     juce::AudioFormatManager formatManager;
     juce::AudioThumbnailCache thumbnailCache { 64 };
     juce::MixerAudioSource mixer;
     std::vector<std::unique_ptr<AudioTrack>> tracks;
 
+    mutable juce::CriticalSection trackLock;
+
     std::atomic<float> masterGain { 0.8f };
+    std::atomic<double> projectPositionSeconds { 0.0 };
+    std::atomic<double> outputSampleRate { 44100.0 };
+    std::atomic<bool> playing { false };
 
     juce::AudioSourcePlayer sourcePlayer;
     juce::AudioDeviceManager deviceManager;

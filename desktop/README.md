@@ -1,51 +1,66 @@
-# SonoForge Studio Desktop
+# SonoForge Studio Desktop 0.3
 
-SonoForge Studio 0.2C consolide le fonctions de transport et de mixage.
+Cette etape introduit un changement d'architecture important : la position du projet n'est plus deduite des transports individuels. SonoForge possede maintenant une horloge globale de projet.
 
-## Fonctionnalites actuelles
+## Nouveautes 0.3
 
-- application native C++20 / JUCE 9.0.2
-- lecture multipiste
-- import de plusieurs fichiers audio
-- volume et panoramique par piste
-- Mute et Solo par piste
-- volume Master
-- Play, Pause et Stop
-- configuration du peripherique audio
-- timeline commune
-- regle temporelle
-- playhead synchronise
-- formes d'onde via JUCE AudioThumbnail
-- longueur graphique des clips proportionnelle a leur duree
-- clic dans la regle ou une piste pour deplacer le playhead
+- transport global independant des pistes
+- position de projet partagee
+- offset de debut propre a chaque piste
+- longueur du projet calculee avec les offsets
+- deplacement horizontal d'un clip a la souris
+- la lecture respecte reellement la nouvelle position du clip
+- le clip affiche son offset en secondes
+- Play, Pause, Stop et seek restent synchronises
+- Mute, Solo, volume, pan et Master sont conserves
+- waveforms et playhead restent synchronises
 
-## Comportement Solo
+## Utilisation
 
-Des qu'une piste est en Solo, toutes les pistes non Solo sont silencieuses. Plusieurs pistes peuvent etre mises en Solo simultanement.
+Importer plusieurs pistes puis faire glisser directement une forme d'onde vers la droite. Le debut du fichier audio se deplace sur la timeline et la lecture attend cette position avant de demarrer la piste.
 
-## Prochain chantier d'architecture
+## Architecture
 
-Le deplacement reel des clips dans le temps demande un transport global avec un offset de debut propre a chaque clip. Cette evolution sera isolee dans une branche dediee afin de ne pas fragiliser le moteur multipiste deja valide.
+```text
+Project clock
+    |
+    +---- projectPosition
+    +---- playing
+    |
+    v
+AudioEngine
+    |
+    +-- AudioTrack A  startOffset = 0 s
+    +-- AudioTrack B  startOffset = 8 s
+    +-- AudioTrack C  startOffset = 14 s
+```
 
-## Prerequis Windows
+Chaque AudioTrack convertit la position globale du projet en position locale :
 
-- Windows 11
-- Visual Studio 2022 avec Desktop development with C++
-- CMake 3.22 ou plus recent
-- Git
+```text
+localPosition = projectPosition - startOffset
+```
 
-## Configuration
+Avant le debut du clip, la piste reste silencieuse. Lorsque l'horloge atteint son offset, le transport local commence au debut du fichier.
+
+## Limite actuelle
+
+Le declenchement est aligne sur les blocs audio. Une future etape rendra le placement sample-accurate pour les usages professionnels exigeants.
+
+## Prochaines etapes
+
+- snapping sur une grille
+- zoom horizontal
+- selection de clips
+- duplication
+- decoupage non destructif
+- sauvegarde du projet
+- undo / redo
+- enregistrement audio
+
+## Compilation Windows
 
 ```powershell
 cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
-```
-
-## Compilation
-
-```powershell
 cmake --build build --config Release --parallel
 ```
-
-## Licence JUCE
-
-JUCE 9.0.2 est distribue sous AGPL-3.0-only ou licence commerciale JUCE. Le choix de licence devra etre tranche avant toute distribution du logiciel.

@@ -1,5 +1,7 @@
 #include "AudioTrack.h"
 
+#include <cmath>
+
 AudioTrack::AudioTrack(
     juce::File sourceFile,
     juce::String trackName,
@@ -93,31 +95,43 @@ void AudioTrack::getNextAudioBlock(
     }
 }
 
-void AudioTrack::play()
+void AudioTrack::syncToProjectPosition(
+    const double projectPositionSeconds,
+    const bool projectPlaying
+)
 {
-    if (getLengthSeconds() > 0.0
-        && getPositionSeconds() < getLengthSeconds())
+    const auto localPosition =
+        projectPositionSeconds - startOffsetSeconds.load();
+
+    const auto length = getLengthSeconds();
+
+    if (localPosition < 0.0 || localPosition >= length)
     {
-        transport.start();
+        if (transport.isPlaying())
+            transport.stop();
+
+        transport.setPosition(
+            localPosition < 0.0 ? 0.0 : length
+        );
+
+        return;
     }
-}
 
-void AudioTrack::pause()
-{
-    transport.stop();
-}
+    const auto currentPosition =
+        transport.getCurrentPosition();
 
-void AudioTrack::stop()
-{
-    transport.stop();
-    transport.setPosition(0.0);
-}
+    if (std::abs(currentPosition - localPosition) > 0.05)
+        transport.setPosition(localPosition);
 
-void AudioTrack::setPositionSeconds(const double seconds)
-{
-    transport.setPosition(
-        juce::jlimit(0.0, getLengthSeconds(), seconds)
-    );
+    if (projectPlaying)
+    {
+        if (! transport.isPlaying())
+            transport.start();
+    }
+    else if (transport.isPlaying())
+    {
+        transport.stop();
+    }
 }
 
 void AudioTrack::setGain(const float newGain)
@@ -143,6 +157,13 @@ void AudioTrack::setSolo(const bool shouldBeSolo)
 void AudioTrack::setSoloMuted(const bool shouldBeSoloMuted)
 {
     soloMuted.store(shouldBeSoloMuted);
+}
+
+void AudioTrack::setStartOffsetSeconds(const double seconds)
+{
+    startOffsetSeconds.store(
+        juce::jlimit(0.0, 36000.0, seconds)
+    );
 }
 
 float AudioTrack::getGain() const noexcept
@@ -178,6 +199,16 @@ double AudioTrack::getPositionSeconds() const
 double AudioTrack::getLengthSeconds() const
 {
     return transport.getLengthInSeconds();
+}
+
+double AudioTrack::getStartOffsetSeconds() const noexcept
+{
+    return startOffsetSeconds.load();
+}
+
+double AudioTrack::getProjectEndSeconds() const noexcept
+{
+    return getStartOffsetSeconds() + getLengthSeconds();
 }
 
 const juce::String& AudioTrack::getName() const noexcept
