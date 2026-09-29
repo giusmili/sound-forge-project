@@ -1,0 +1,60 @@
+name: Windows signed build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure CMake
+        run: cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build Release
+        run: cmake --build build --config Release --parallel
+      - name: Locate executable
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Filter "SonoForge.exe" -Recurse | Where-Object { $_.FullName -match "Release" } | Select-Object -First 1
+          if (-not $exe) { throw "SonoForge.exe not found" }
+          Copy-Item $exe.FullName "$env:GITHUB_WORKSPACE\SonoForge.exe"
+      - name: Import code-signing certificate
+        if: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "sonoforge-signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String('${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}'))
+          "SONOFORGE_PFX=$pfx" >> $env:GITHUB_ENV
+      - name: Sign SonoForge.exe
+        if: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter signtool.exe -Recurse | Where-Object { $_.FullName -match "\\x64\\signtool.exe$" } | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe not found" }
+          & $signtool.FullName sign /f "$env:SONOFORGE_PFX" /p '${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}' /fd SHA256 /td SHA256 /tr "http://timestamp.digicert.com" "$env:GITHUB_WORKSPACE\SonoForge.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Code signing failed" }
+      - name: Verify Authenticode signature
+        if: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
+        shell: pwsh
+        run: |
+          $signature = Get-AuthenticodeSignature "$env:GITHUB_WORKSPACE\SonoForge.exe"
+          $signature | Format-List *
+          if ($signature.Status -ne "Valid") { throw "Invalid Authenticode signature: $($signature.Status)" }
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SonoForge-Windows-x64
+          path: SonoForge.exe
+          if-no-files-found: error
+      - name: Attach executable to GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SonoForge.exe
