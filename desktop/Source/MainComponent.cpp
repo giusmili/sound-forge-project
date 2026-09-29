@@ -8,16 +8,16 @@ constexpr auto backgroundColour = 0xff111318;
 constexpr auto panelColour = 0xff1b1f26;
 constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto textColour = 0xffe8edf3;
-constexpr int trackRowHeight = 94;
+constexpr int trackRowHeight = 112;
 }
 
 MainComponent::MainComponent()
 {
     setOpaque(true);
-    setSize(1050, 700);
+    setSize(1180, 760);
 
     titleLabel.setText(
-        "SonoForge Studio 0.2",
+        "SonoForge Studio 0.2B",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -100,6 +100,12 @@ MainComponent::MainComponent()
     );
     addAndMakeVisible(masterSlider);
 
+    timelineRuler.onSeek = [this](const double seconds)
+    {
+        seekTo(seconds);
+    };
+    addAndMakeVisible(timelineRuler);
+
     trackViewport.setViewedComponent(&trackList, false);
     trackViewport.setScrollBarsShown(true, false);
     addAndMakeVisible(trackViewport);
@@ -118,6 +124,7 @@ MainComponent::MainComponent()
     stopButton.onClick = [this]
     {
         audioEngine.stop();
+        updateTimeline(0.0);
         stopButton.setEnabled(false);
     };
 
@@ -137,7 +144,7 @@ MainComponent::MainComponent()
         static_cast<float>(masterSlider.getValue())
     );
 
-    startTimerHz(20);
+    startTimerHz(30);
 }
 
 void MainComponent::paint(juce::Graphics& graphics)
@@ -179,9 +186,9 @@ void MainComponent::resized()
         importRow.removeFromLeft(180)
     );
 
-    area.removeFromTop(14);
+    area.removeFromTop(10);
 
-    auto transportRow = area.removeFromTop(58);
+    auto transportRow = area.removeFromTop(54);
     playButton.setBounds(
         transportRow.removeFromLeft(90).reduced(5)
     );
@@ -200,7 +207,13 @@ void MainComponent::resized()
         transportRow.removeFromLeft(260).reduced(4)
     );
 
-    area.removeFromTop(12);
+    area.removeFromTop(8);
+
+    timelineRuler.setBounds(
+        area.removeFromTop(34)
+    );
+
+    area.removeFromTop(2);
     trackViewport.setBounds(area);
 
     layoutTracks();
@@ -270,6 +283,9 @@ void MainComponent::openAudioFiles()
                 juce::dontSendNotification
             );
 
+            safeThis->updateTimeline(
+                safeThis->audioEngine.getPositionSeconds()
+            );
             safeThis->layoutTracks();
         }
     );
@@ -278,8 +294,17 @@ void MainComponent::openAudioFiles()
 void MainComponent::addTrackRow(AudioTrack& track)
 {
     auto* row = trackRows.add(
-        new TrackRowComponent(track)
+        new TrackRowComponent(
+            track,
+            audioEngine.getFormatManager(),
+            audioEngine.getThumbnailCache()
+        )
     );
+
+    row->onSeek = [this](const double seconds)
+    {
+        seekTo(seconds);
+    };
 
     trackList.addAndMakeVisible(row);
     layoutTracks();
@@ -288,7 +313,7 @@ void MainComponent::addTrackRow(AudioTrack& track)
 void MainComponent::layoutTracks()
 {
     const auto width =
-        juce::jmax(320, trackViewport.getWidth() - 14);
+        juce::jmax(500, trackViewport.getWidth() - 14);
 
     const auto height =
         juce::jmax(
@@ -311,6 +336,35 @@ void MainComponent::layoutTracks()
 
         y += trackRowHeight;
     }
+}
+
+void MainComponent::updateTimeline(
+    const double position
+)
+{
+    const auto length =
+        audioEngine.getLengthSeconds();
+
+    timelineRuler.setProjectLength(length);
+    timelineRuler.setPosition(position);
+
+    for (auto* row : trackRows)
+        row->setTimelineState(length, position);
+
+    timeLabel.setText(
+        formatTime(position)
+            + " / "
+            + formatTime(length),
+        juce::dontSendNotification
+    );
+}
+
+void MainComponent::seekTo(const double seconds)
+{
+    audioEngine.setPositionSeconds(seconds);
+    updateTimeline(
+        audioEngine.getPositionSeconds()
+    );
 }
 
 void MainComponent::showAudioSettings()
@@ -346,15 +400,8 @@ void MainComponent::timerCallback()
 {
     const auto current =
         audioEngine.getPositionSeconds();
-    const auto length =
-        audioEngine.getLengthSeconds();
 
-    timeLabel.setText(
-        formatTime(current)
-            + " / "
-            + formatTime(length),
-        juce::dontSendNotification
-    );
+    updateTimeline(current);
 
     if (! audioEngine.isPlaying())
         stopButton.setEnabled(false);

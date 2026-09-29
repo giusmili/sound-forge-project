@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 
 #include "AudioEngine.h"
+#include "TimelineRulerComponent.h"
 #include "TrackRowComponent.h"
 
 class MainComponent final : public juce::Component,
@@ -19,6 +20,8 @@ private:
     void openAudioFiles();
     void addTrackRow(AudioTrack& track);
     void layoutTracks();
+    void updateTimeline(double position);
+    void seekTo(double seconds);
     void showAudioSettings();
     void timerCallback() override;
 
@@ -38,6 +41,7 @@ private:
 
     juce::Slider masterSlider;
 
+    TimelineRulerComponent timelineRuler;
     juce::Component trackList;
     juce::Viewport trackViewport;
     juce::OwnedArray<TrackRowComponent> trackRows;
