@@ -27,7 +27,14 @@ public:
 
     void setTimelineState(
         double projectLengthSeconds,
-        double playheadSeconds
+        double playheadSeconds,
+        double viewStartSeconds,
+        double viewDurationSeconds
+    );
+
+    void setSnapSettings(
+        bool enabled,
+        double intervalSeconds
     );
 
     std::function<void(double)> onSeek;
@@ -50,11 +57,16 @@ private:
 
     double projectLength = 0.0;
     double playheadPosition = 0.0;
+    double viewStart = 0.0;
+    double viewDuration = 0.0;
+
+    bool snapEnabled = true;
+    double snapInterval = 1.0;
 
     bool draggingClip = false;
     float dragStartX = 0.0f;
     double dragStartOffset = 0.0;
-    double dragTimelineLength = 0.0;
+    double dragViewDuration = 0.0;
 
     juce::Label nameLabel;
     juce::Label volumeLabel;
