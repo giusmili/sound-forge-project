@@ -8,16 +8,18 @@ constexpr auto backgroundColour = 0xff111318;
 constexpr auto panelColour = 0xff1b1f26;
 constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto textColour = 0xffe8edf3;
+constexpr auto snapColour = 0xff3d8f68;
 constexpr int trackRowHeight = 112;
+constexpr double snapIntervalSeconds = 1.0;
 }
 
 MainComponent::MainComponent()
 {
     setOpaque(true);
-    setSize(1180, 760);
+    setSize(1180, 800);
 
     titleLabel.setText(
-        "SonoForge Studio 0.3",
+        "SonoForge Studio 0.3.1",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -62,12 +64,33 @@ MainComponent::MainComponent()
     );
     addAndMakeVisible(masterLabel);
 
+    zoomLabel.setText(
+        "Zoom",
+        juce::dontSendNotification
+    );
+    zoomLabel.setColour(
+        juce::Label::textColourId,
+        juce::Colour(textColour)
+    );
+    addAndMakeVisible(zoomLabel);
+
+    viewLabel.setText(
+        "Vue",
+        juce::dontSendNotification
+    );
+    viewLabel.setColour(
+        juce::Label::textColourId,
+        juce::Colour(textColour)
+    );
+    addAndMakeVisible(viewLabel);
+
     for (auto* button : {
              &openButton,
              &playButton,
              &pauseButton,
              &stopButton,
-             &audioSettingsButton
+             &audioSettingsButton,
+             &snapButton
          })
     {
         button->setColour(
@@ -80,6 +103,16 @@ MainComponent::MainComponent()
         );
         addAndMakeVisible(*button);
     }
+
+    snapButton.setClickingTogglesState(true);
+    snapButton.setToggleState(
+        true,
+        juce::dontSendNotification
+    );
+    snapButton.setColour(
+        juce::TextButton::buttonOnColourId,
+        juce::Colour(snapColour)
+    );
 
     playButton.setEnabled(false);
     pauseButton.setEnabled(false);
@@ -101,6 +134,33 @@ MainComponent::MainComponent()
         juce::Colour(accentColour)
     );
     addAndMakeVisible(masterSlider);
+
+    zoomSlider.setRange(1.0, 8.0, 0.25);
+    zoomSlider.setValue(1.0);
+    zoomSlider.setSliderStyle(
+        juce::Slider::LinearHorizontal
+    );
+    zoomSlider.setTextBoxStyle(
+        juce::Slider::TextBoxRight,
+        false,
+        52,
+        22
+    );
+    addAndMakeVisible(zoomSlider);
+
+    viewSlider.setRange(0.0, 1.0, 0.001);
+    viewSlider.setValue(0.0);
+    viewSlider.setSliderStyle(
+        juce::Slider::LinearHorizontal
+    );
+    viewSlider.setTextBoxStyle(
+        juce::Slider::NoTextBox,
+        false,
+        0,
+        0
+    );
+    viewSlider.setEnabled(false);
+    addAndMakeVisible(viewSlider);
 
     timelineRuler.onSeek = [this](const double seconds)
     {
@@ -141,10 +201,29 @@ MainComponent::MainComponent()
         showAudioSettings();
     };
 
+    snapButton.onClick = [this]
+    {
+        updateSnapSettings();
+    };
+
     masterSlider.onValueChange = [this]
     {
         audioEngine.setMasterGain(
             static_cast<float>(masterSlider.getValue())
+        );
+    };
+
+    zoomSlider.onValueChange = [this]
+    {
+        updateTimeline(
+            audioEngine.getPositionSeconds()
+        );
+    };
+
+    viewSlider.onValueChange = [this]
+    {
+        updateTimeline(
+            audioEngine.getPositionSeconds()
         );
     };
 
@@ -218,7 +297,33 @@ void MainComponent::resized()
         transportRow.removeFromLeft(250).reduced(4)
     );
 
-    area.removeFromTop(8);
+    area.removeFromTop(6);
+
+    auto viewRow = area.removeFromTop(40);
+
+    snapButton.setBounds(
+        viewRow.removeFromLeft(96).reduced(3)
+    );
+
+    viewRow.removeFromLeft(8);
+
+    zoomLabel.setBounds(
+        viewRow.removeFromLeft(46)
+    );
+    zoomSlider.setBounds(
+        viewRow.removeFromLeft(190).reduced(3)
+    );
+
+    viewRow.removeFromLeft(12);
+
+    viewLabel.setBounds(
+        viewRow.removeFromLeft(38)
+    );
+    viewSlider.setBounds(
+        viewRow.removeFromLeft(300).reduced(3)
+    );
+
+    area.removeFromTop(6);
 
     timelineRuler.setBounds(
         area.removeFromTop(34)
@@ -329,6 +434,11 @@ void MainComponent::addTrackRow(AudioTrack& track)
         clipMoved();
     };
 
+    row->setSnapSettings(
+        snapButton.getToggleState(),
+        snapIntervalSeconds
+    );
+
     trackList.addAndMakeVisible(row);
     layoutTracks();
 }
@@ -368,11 +478,33 @@ void MainComponent::updateTimeline(
     const auto length =
         audioEngine.getLengthSeconds();
 
-    timelineRuler.setProjectLength(length);
-    timelineRuler.setPosition(position);
+    const auto viewDuration =
+        getViewDuration(length);
+
+    const auto viewStart =
+        getViewStart(length, viewDuration);
+
+    viewSlider.setEnabled(
+        length > 0.0
+        && viewDuration < length - 0.001
+    );
+
+    timelineRuler.setView(
+        length,
+        viewStart,
+        viewDuration,
+        position
+    );
 
     for (auto* row : trackRows)
-        row->setTimelineState(length, position);
+    {
+        row->setTimelineState(
+            length,
+            position,
+            viewStart,
+            viewDuration
+        );
+    }
 
     timeLabel.setText(
         formatTime(position)
@@ -398,6 +530,49 @@ void MainComponent::clipMoved()
     updateTimeline(
         audioEngine.getPositionSeconds()
     );
+}
+
+void MainComponent::updateSnapSettings()
+{
+    for (auto* row : trackRows)
+    {
+        row->setSnapSettings(
+            snapButton.getToggleState(),
+            snapIntervalSeconds
+        );
+    }
+}
+
+double MainComponent::getViewDuration(
+    const double projectLength
+) const
+{
+    if (projectLength <= 0.0)
+        return 0.0;
+
+    const auto zoom = juce::jmax(
+        1.0,
+        zoomSlider.getValue()
+    );
+
+    return juce::jlimit(
+        0.1,
+        projectLength,
+        projectLength / zoom
+    );
+}
+
+double MainComponent::getViewStart(
+    const double projectLength,
+    const double viewDuration
+) const
+{
+    const auto maxStart = juce::jmax(
+        0.0,
+        projectLength - viewDuration
+    );
+
+    return viewSlider.getValue() * maxStart;
 }
 
 void MainComponent::showAudioSettings()

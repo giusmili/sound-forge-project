@@ -23,8 +23,12 @@ private:
     void updateTimeline(double position);
     void seekTo(double seconds);
     void clipMoved();
+    void updateSnapSettings();
     void showAudioSettings();
     void timerCallback() override;
+
+    [[nodiscard]] double getViewDuration(double projectLength) const;
+    [[nodiscard]] double getViewStart(double projectLength, double viewDuration) const;
 
     static juce::String formatTime(double seconds);
 
@@ -34,14 +38,19 @@ private:
     juce::Label projectLabel;
     juce::Label timeLabel;
     juce::Label masterLabel;
+    juce::Label zoomLabel;
+    juce::Label viewLabel;
 
     juce::TextButton openButton { "Importer pistes" };
     juce::TextButton playButton { "Play" };
     juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
     juce::TextButton audioSettingsButton { "Audio" };
+    juce::TextButton snapButton { "Snap 1 s" };
 
     juce::Slider masterSlider;
+    juce::Slider zoomSlider;
+    juce::Slider viewSlider;
 
     TimelineRulerComponent timelineRuler;
     juce::Component trackList;

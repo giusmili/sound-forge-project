@@ -10,8 +10,12 @@ public:
     void paint(juce::Graphics& graphics) override;
     void mouseDown(const juce::MouseEvent& event) override;
 
-    void setProjectLength(double seconds);
-    void setPosition(double seconds);
+    void setView(
+        double projectLengthSeconds,
+        double viewStartSeconds,
+        double viewDurationSeconds,
+        double positionSeconds
+    );
 
     std::function<void(double)> onSeek;
 
@@ -22,6 +26,8 @@ private:
     [[nodiscard]] double chooseTickInterval() const;
 
     double projectLength = 0.0;
+    double viewStart = 0.0;
+    double viewDuration = 0.0;
     double position = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineRulerComponent)

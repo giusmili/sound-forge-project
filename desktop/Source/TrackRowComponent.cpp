@@ -139,7 +139,10 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
     graphics.setColour(juce::Colour(timelineColour));
     graphics.fillRect(waveformBounds);
 
-    if (projectLength > 0.0)
+    graphics.saveState();
+    graphics.reduceClipRegion(waveformBounds);
+
+    if (projectLength > 0.0 && viewDuration > 0.0)
     {
         const auto clipBounds = getClipBounds();
 
@@ -187,30 +190,36 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
             );
         }
 
-        const auto ratio = juce::jlimit(
-            0.0,
-            1.0,
-            playheadPosition / projectLength
-        );
+        const auto viewEnd = viewStart + viewDuration;
 
-        const auto playheadX =
-            waveformBounds.getX()
-            + static_cast<int>(
-                std::round(
-                    ratio * waveformBounds.getWidth()
-                )
+        if (playheadPosition >= viewStart
+            && playheadPosition <= viewEnd)
+        {
+            const auto ratio =
+                (playheadPosition - viewStart)
+                / viewDuration;
+
+            const auto playheadX =
+                waveformBounds.getX()
+                + static_cast<int>(
+                    std::round(
+                        ratio * waveformBounds.getWidth()
+                    )
+                );
+
+            graphics.setColour(
+                juce::Colour(playheadColour)
             );
-
-        graphics.setColour(
-            juce::Colour(playheadColour)
-        );
-        graphics.fillRect(
-            playheadX - 1,
-            waveformBounds.getY(),
-            2,
-            waveformBounds.getHeight()
-        );
+            graphics.fillRect(
+                playheadX - 1,
+                waveformBounds.getY(),
+                2,
+                waveformBounds.getHeight()
+            );
+        }
     }
+
+    graphics.restoreState();
 
     graphics.setColour(
         juce::Colour(0xff39424e)
@@ -265,12 +274,13 @@ void TrackRowComponent::mouseDown(
     const auto clipBounds = getClipBounds();
 
     if (projectLength > 0.0
+        && viewDuration > 0.0
         && clipBounds.contains(event.getPosition()))
     {
         draggingClip = true;
         dragStartX = event.position.x;
         dragStartOffset = track.getStartOffsetSeconds();
-        dragTimelineLength = projectLength;
+        dragViewDuration = viewDuration;
         repaint();
         return;
     }
@@ -278,6 +288,7 @@ void TrackRowComponent::mouseDown(
     const auto waveformBounds = getWaveformBounds();
 
     if (projectLength <= 0.0
+        || viewDuration <= 0.0
         || ! waveformBounds.contains(event.getPosition()))
     {
         return;
@@ -297,14 +308,22 @@ void TrackRowComponent::mouseDown(
     );
 
     if (onSeek)
-        onSeek(ratio * projectLength);
+    {
+        onSeek(
+            juce::jlimit(
+                0.0,
+                projectLength,
+                viewStart + ratio * viewDuration
+            )
+        );
+    }
 }
 
 void TrackRowComponent::mouseDrag(
     const juce::MouseEvent& event
 )
 {
-    if (! draggingClip || dragTimelineLength <= 0.0)
+    if (! draggingClip || dragViewDuration <= 0.0)
         return;
 
     const auto waveformBounds = getWaveformBounds();
@@ -318,14 +337,21 @@ void TrackRowComponent::mouseDrag(
     const auto deltaSeconds =
         static_cast<double>(deltaPixels)
         / static_cast<double>(waveformBounds.getWidth())
-        * dragTimelineLength;
+        * dragViewDuration;
 
-    track.setStartOffsetSeconds(
-        juce::jmax(
-            0.0,
-            dragStartOffset + deltaSeconds
-        )
+    auto newOffset = juce::jmax(
+        0.0,
+        dragStartOffset + deltaSeconds
     );
+
+    if (snapEnabled && snapInterval > 0.0)
+    {
+        newOffset =
+            std::round(newOffset / snapInterval)
+            * snapInterval;
+    }
+
+    track.setStartOffsetSeconds(newOffset);
 
     if (onClipMoved)
         onClipMoved();
@@ -350,7 +376,9 @@ void TrackRowComponent::mouseUp(
 
 void TrackRowComponent::setTimelineState(
     const double projectLengthSeconds,
-    const double playheadSeconds
+    const double playheadSeconds,
+    const double viewStartSeconds,
+    const double viewDurationSeconds
 )
 {
     projectLength = juce::jmax(
@@ -364,7 +392,36 @@ void TrackRowComponent::setTimelineState(
         playheadSeconds
     );
 
+    viewDuration = juce::jlimit(
+        0.0,
+        projectLength,
+        viewDurationSeconds
+    );
+
+    const auto maxStart = juce::jmax(
+        0.0,
+        projectLength - viewDuration
+    );
+
+    viewStart = juce::jlimit(
+        0.0,
+        maxStart,
+        viewStartSeconds
+    );
+
     repaint();
+}
+
+void TrackRowComponent::setSnapSettings(
+    const bool enabled,
+    const double intervalSeconds
+)
+{
+    snapEnabled = enabled;
+    snapInterval = juce::jmax(
+        0.001,
+        intervalSeconds
+    );
 }
 
 void TrackRowComponent::changeListenerCallback(
@@ -409,44 +466,34 @@ TrackRowComponent::getClipBounds() const
 {
     const auto waveformBounds = getWaveformBounds();
 
-    if (projectLength <= 0.0)
+    if (projectLength <= 0.0 || viewDuration <= 0.0)
         return {};
 
-    const auto startRatio = juce::jlimit(
-        0.0,
-        1.0,
-        track.getStartOffsetSeconds() / projectLength
-    );
-
-    const auto durationRatio = juce::jlimit(
-        0.0,
-        1.0,
-        track.getLengthSeconds() / projectLength
-    );
+    const auto clipStart = track.getStartOffsetSeconds();
+    const auto clipEnd = track.getProjectEndSeconds();
 
     const auto x = waveformBounds.getX()
         + static_cast<int>(
             std::round(
-                startRatio * waveformBounds.getWidth()
+                (clipStart - viewStart)
+                / viewDuration
+                * waveformBounds.getWidth()
             )
         );
 
-    const auto width = juce::jmax(
-        1,
-        static_cast<int>(
+    const auto right = waveformBounds.getX()
+        + static_cast<int>(
             std::round(
-                durationRatio * waveformBounds.getWidth()
+                (clipEnd - viewStart)
+                / viewDuration
+                * waveformBounds.getWidth()
             )
-        )
-    );
+        );
 
     return juce::Rectangle<int>(
         x,
         waveformBounds.getY(),
-        juce::jmin(
-            width,
-            waveformBounds.getRight() - x
-        ),
+        juce::jmax(1, right - x),
         waveformBounds.getHeight()
     );
 }

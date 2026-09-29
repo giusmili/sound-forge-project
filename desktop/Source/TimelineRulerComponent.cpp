@@ -32,19 +32,37 @@ void TimelineRulerComponent::paint(juce::Graphics& graphics)
         juce::Justification::centredLeft
     );
 
-    if (projectLength <= 0.0 || timeline.getWidth() <= 0)
+    if (projectLength <= 0.0
+        || viewDuration <= 0.0
+        || timeline.getWidth() <= 0)
+    {
         return;
+    }
 
     const auto interval = chooseTickInterval();
+    const auto viewEnd = viewStart + viewDuration;
 
-    for (double second = 0.0;
-         second <= projectLength + 0.001;
+    auto firstTick =
+        std::floor(viewStart / interval) * interval;
+
+    if (firstTick < 0.0)
+        firstTick = 0.0;
+
+    for (double second = firstTick;
+         second <= viewEnd + 0.001;
          second += interval)
     {
-        const auto ratio = second / projectLength;
+        if (second < viewStart - 0.001)
+            continue;
+
+        const auto ratio =
+            (second - viewStart) / viewDuration;
+
         const auto x = timeline.getX()
             + static_cast<int>(
-                std::round(ratio * timeline.getWidth())
+                std::round(
+                    ratio * timeline.getWidth()
+                )
             );
 
         graphics.setColour(juce::Colour(separatorColour));
@@ -59,21 +77,23 @@ void TimelineRulerComponent::paint(juce::Graphics& graphics)
             formatTick(second),
             x + 4,
             1,
-            55,
+            58,
             15,
             juce::Justification::centredLeft
         );
     }
 
-    const auto playheadRatio = juce::jlimit(
-        0.0,
-        1.0,
-        position / projectLength
-    );
+    if (position < viewStart || position > viewEnd)
+        return;
+
+    const auto playheadRatio =
+        (position - viewStart) / viewDuration;
 
     const auto playheadX = timeline.getX()
         + static_cast<int>(
-            std::round(playheadRatio * timeline.getWidth())
+            std::round(
+                playheadRatio * timeline.getWidth()
+            )
         );
 
     graphics.setColour(juce::Colour(playheadColour));
@@ -96,6 +116,7 @@ void TimelineRulerComponent::mouseDown(
 )
 {
     if (projectLength <= 0.0
+        || viewDuration <= 0.0
         || event.position.x < static_cast<float>(controlsWidth))
     {
         return;
@@ -115,26 +136,51 @@ void TimelineRulerComponent::mouseDown(
             / static_cast<double>(usableWidth)
     );
 
-    const auto requestedPosition = ratio * projectLength;
+    const auto requestedPosition = juce::jlimit(
+        0.0,
+        projectLength,
+        viewStart + ratio * viewDuration
+    );
 
     if (onSeek)
         onSeek(requestedPosition);
 }
 
-void TimelineRulerComponent::setProjectLength(
-    const double seconds
+void TimelineRulerComponent::setView(
+    const double projectLengthSeconds,
+    const double viewStartSeconds,
+    const double viewDurationSeconds,
+    const double positionSeconds
 )
 {
-    projectLength = juce::jmax(0.0, seconds);
-    position = juce::jlimit(0.0, projectLength, position);
-    repaint();
-}
+    projectLength = juce::jmax(
+        0.0,
+        projectLengthSeconds
+    );
 
-void TimelineRulerComponent::setPosition(
-    const double seconds
-)
-{
-    position = juce::jlimit(0.0, projectLength, seconds);
+    viewDuration = juce::jlimit(
+        0.0,
+        projectLength,
+        viewDurationSeconds
+    );
+
+    const auto maxStart = juce::jmax(
+        0.0,
+        projectLength - viewDuration
+    );
+
+    viewStart = juce::jlimit(
+        0.0,
+        maxStart,
+        viewStartSeconds
+    );
+
+    position = juce::jlimit(
+        0.0,
+        projectLength,
+        positionSeconds
+    );
+
     repaint();
 }
 
@@ -154,13 +200,16 @@ juce::String TimelineRulerComponent::formatTick(
 
 double TimelineRulerComponent::chooseTickInterval() const
 {
-    if (projectLength <= 30.0)
+    if (viewDuration <= 10.0)
+        return 1.0;
+
+    if (viewDuration <= 30.0)
         return 2.0;
 
-    if (projectLength <= 120.0)
+    if (viewDuration <= 120.0)
         return 5.0;
 
-    if (projectLength <= 600.0)
+    if (viewDuration <= 600.0)
         return 15.0;
 
     return 30.0;
