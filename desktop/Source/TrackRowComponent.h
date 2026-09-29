@@ -29,6 +29,7 @@ public:
     );
 
     std::function<void(double)> onSeek;
+    std::function<void()> onSoloChanged;
 
 private:
     void changeListenerCallback(
@@ -36,6 +37,7 @@ private:
     ) override;
 
     void refreshMuteButton();
+    void refreshSoloButton();
 
     [[nodiscard]] juce::Rectangle<int> getWaveformBounds() const;
     [[nodiscard]] juce::Rectangle<int> getClipBounds() const;
@@ -51,6 +53,7 @@ private:
     juce::Label panLabel;
 
     juce::TextButton muteButton { "M" };
+    juce::TextButton soloButton { "S" };
     juce::Slider volumeSlider;
     juce::Slider panSlider;
 

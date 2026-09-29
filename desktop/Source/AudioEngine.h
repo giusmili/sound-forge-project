@@ -20,9 +20,11 @@ public:
     );
 
     void play();
+    void pause();
     void stop();
     void setPositionSeconds(double seconds);
     void setMasterGain(float gain);
+    void refreshSoloState();
 
     [[nodiscard]] bool isPlaying() const;
     [[nodiscard]] double getPositionSeconds() const;

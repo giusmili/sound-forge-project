@@ -19,16 +19,20 @@ public:
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferToFill) override;
 
     void play();
+    void pause();
     void stop();
     void setPositionSeconds(double seconds);
 
     void setGain(float newGain);
     void setPan(float newPan);
     void setMuted(bool shouldBeMuted);
+    void setSolo(bool shouldBeSolo);
+    void setSoloMuted(bool shouldBeSoloMuted);
 
     [[nodiscard]] float getGain() const noexcept;
     [[nodiscard]] float getPan() const noexcept;
     [[nodiscard]] bool isMuted() const noexcept;
+    [[nodiscard]] bool isSolo() const noexcept;
     [[nodiscard]] bool isPlaying() const;
     [[nodiscard]] double getPositionSeconds() const;
     [[nodiscard]] double getLengthSeconds() const;
@@ -44,6 +48,8 @@ private:
     std::atomic<float> gain { 1.0f };
     std::atomic<float> pan { 0.0f };
     std::atomic<bool> muted { false };
+    std::atomic<bool> solo { false };
+    std::atomic<bool> soloMuted { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioTrack)
 };

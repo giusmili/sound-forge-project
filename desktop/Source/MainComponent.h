@@ -36,6 +36,7 @@ private:
 
     juce::TextButton openButton { "Importer pistes" };
     juce::TextButton playButton { "Play" };
+    juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
     juce::TextButton audioSettingsButton { "Audio" };
 

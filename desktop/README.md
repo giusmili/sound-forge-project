@@ -1,6 +1,6 @@
 # SonoForge Studio Desktop
 
-SonoForge Studio est maintenant dans la phase 0.2B du moteur natif.
+SonoForge Studio 0.2C consolide le fonctions de transport et de mixage.
 
 ## Fonctionnalites actuelles
 
@@ -8,36 +8,24 @@ SonoForge Studio est maintenant dans la phase 0.2B du moteur natif.
 - lecture multipiste
 - import de plusieurs fichiers audio
 - volume et panoramique par piste
-- mute par piste
+- Mute et Solo par piste
 - volume Master
+- Play, Pause et Stop
 - configuration du peripherique audio
 - timeline commune
 - regle temporelle
 - playhead synchronise
-- formes d'onde generees par JUCE AudioThumbnail
+- formes d'onde via JUCE AudioThumbnail
 - longueur graphique des clips proportionnelle a leur duree
-- clic dans la regle ou dans une piste pour deplacer le playhead
+- clic dans la regle ou une piste pour deplacer le playhead
 
-## Architecture
+## Comportement Solo
 
-```text
-MainComponent
-    |
-    +-- TimelineRulerComponent
-    |
-    +-- TrackRowComponent N
-    |       |
-    |       +-- AudioThumbnail
-    |
-    v
-AudioEngine
-    |
-    +-- MixerAudioSource
-            |
-            +-- AudioTrack 1
-            +-- AudioTrack 2
-            +-- AudioTrack N
-```
+Des qu'une piste est en Solo, toutes les pistes non Solo sont silencieuses. Plusieurs pistes peuvent etre mises en Solo simultanement.
+
+## Prochain chantier d'architecture
+
+Le deplacement reel des clips dans le temps demande un transport global avec un offset de debut propre a chaque clip. Cette evolution sera isolee dans une branche dediee afin de ne pas fragiliser le moteur multipiste deja valide.
 
 ## Prerequis Windows
 
@@ -57,16 +45,6 @@ cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
 ```powershell
 cmake --build build --config Release --parallel
 ```
-
-## Etapes suivantes
-
-- deplacement des clips dans le temps
-- redimensionnement non destructif
-- zoom horizontal
-- Solo
-- pause
-- sauvegarde du projet
-- enregistrement audio
 
 ## Licence JUCE
 
