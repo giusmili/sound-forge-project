@@ -34,6 +34,8 @@ public:
     [[nodiscard]] bool isMuted() const noexcept;
     [[nodiscard]] bool isSolo() const noexcept;
     [[nodiscard]] bool isPlaying() const;
+    [[nodiscard]] float getPeakLeft() const noexcept;
+    [[nodiscard]] float getPeakRight() const noexcept;
     [[nodiscard]] double getPositionSeconds() const;
     [[nodiscard]] double getLengthSeconds() const;
     [[nodiscard]] const juce::String& getName() const noexcept;
@@ -50,6 +52,8 @@ private:
     std::atomic<bool> muted { false };
     std::atomic<bool> solo { false };
     std::atomic<bool> soloMuted { false };
+    std::atomic<float> peakLeft { 0.0f };
+    std::atomic<float> peakRight { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioTrack)
 };
