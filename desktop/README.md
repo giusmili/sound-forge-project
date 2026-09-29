@@ -1,47 +1,62 @@
-# SonoForge Studio Desktop 0.3.1
+# SonoForge Studio Desktop 0.3.2
 
-Cette iteration ajoute les premiers outils d'edition temporelle au transport global de SonoForge.
+Cette iteration transforme le snapping temporel en premiere grille musicale.
 
 ## Nouveautes
 
-- snapping des clips a la seconde
-- activation/desactivation du snapping
-- zoom horizontal de 1x a 8x
-- navigation dans la portion visible de la timeline
-- regle temporelle adaptee a la fenetre de zoom
-- seek relatif a la portion visible
-- waveforms conservees a la bonne echelle pendant le zoom
-- deplacement des clips calcule dans l'echelle temporelle visible
+- BPM reglable de 40 a 240
+- grille visuelle basee sur les temps
+- snapping des clips sur les temps
+- recalcul immediat de la grille lors du changement de BPM
+- grille coherente avec le zoom horizontal
+- Snap Beat activable/desactivable
 
-## Commandes
-
-- Snap 1 s : active ou desactive l'aimantation sur les secondes entieres
-- Zoom : agrandit la timeline horizontalement
-- Vue : deplace la fenetre temporelle lorsque le zoom est superieur a 1x
-
-## Moteur audio
-
-Le moteur 0.3 reste inchange :
+A 120 BPM, un temps correspond a 0,5 seconde :
 
 ```text
-projectPosition -> AudioEngine -> AudioTrack
-                                  startOffset
+60 / 120 = 0.5 s
 ```
 
-Le zoom et le snapping sont des fonctions d'edition et n'alterent pas le moteur de lecture.
+A 90 BPM :
 
-## Limites actuelles
+```text
+60 / 90 = 0.666... s
+```
 
-- snapping fixe a 1 seconde
-- pas encore de grille musicale basee sur BPM
-- pas encore de selection multiple
-- pas encore de duplication ou decoupage
-- scheduling audio toujours aligne sur les blocs
+## Edition
 
-## Prochaines etapes
+Le drag d'un clip utilise maintenant :
 
-- grille BPM / mesures / temps
-- selection d'un clip
+```text
+position brute
+    |
+    v
+intervalle = 60 / BPM
+    |
+    v
+position quantifiee sur le temps
+```
+
+La grille reste visible meme lorsque le snapping est desactive, afin de conserver un repere musical.
+
+## Fonctions conservees
+
+- transport global
+- offsets reels des clips
+- Play / Pause / Stop
+- seek
+- waveforms
+- zoom 1x a 8x
+- navigation temporelle
+- volume / pan / Mute / Solo
+- Master
+- configuration audio
+
+## Etapes suivantes
+
+- subdivisions 1/4, 1/8, 1/16
+- mesures en 4/4
+- selection des clips
 - duplication
 - decoupage non destructif
 - sauvegarde de projet
