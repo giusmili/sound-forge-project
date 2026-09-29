@@ -30,6 +30,8 @@ public:
     [[nodiscard]] double getPositionSeconds() const;
     [[nodiscard]] double getLengthSeconds() const;
     [[nodiscard]] int getTrackCount() const noexcept;
+    [[nodiscard]] float getMasterPeakLeft() const noexcept;
+    [[nodiscard]] float getMasterPeakRight() const noexcept;
 
     juce::AudioDeviceManager& getDeviceManager() noexcept;
     juce::AudioFormatManager& getFormatManager() noexcept;
@@ -42,6 +44,8 @@ private:
     std::vector<std::unique_ptr<AudioTrack>> tracks;
 
     std::atomic<float> masterGain { 0.8f };
+    std::atomic<float> masterPeakLeft { 0.0f };
+    std::atomic<float> masterPeakRight { 0.0f };
 
     juce::AudioSourcePlayer sourcePlayer;
     juce::AudioDeviceManager deviceManager;
