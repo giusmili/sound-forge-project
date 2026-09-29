@@ -36,6 +36,8 @@ target_sources(SonoForge
         Source/TrackRowComponent.h
         Source/TimelineRulerComponent.cpp
         Source/TimelineRulerComponent.h
+        Source/MixerComponent.cpp
+        Source/MixerComponent.h
 )
 
 target_compile_definitions(SonoForge
