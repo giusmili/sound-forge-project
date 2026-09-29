@@ -12,6 +12,7 @@ constexpr auto snapColour = 0xff3d8f68;
 constexpr int trackRowHeight = 112;
 constexpr double minimumSplitMarginSeconds = 0.01;
 constexpr auto maxHistoryEntries = 50U;
+constexpr double autosaveIntervalMs = 30000.0;
 }
 
 MainComponent::MainComponent()
@@ -20,7 +21,7 @@ MainComponent::MainComponent()
     setSize(1320, 820);
 
     titleLabel.setText(
-        "SonoForge Studio 0.5",
+        "SonoForge Studio 0.5.1",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -75,6 +76,7 @@ MainComponent::MainComponent()
     for (auto* button : {
              &openProjectButton,
              &saveProjectButton,
+             &recoverButton,
              &openButton,
              &undoButton,
              &redoButton,
@@ -194,6 +196,11 @@ MainComponent::MainComponent()
         saveProject();
     };
 
+    recoverButton.onClick = [this]
+    {
+        recoverAutosave();
+    };
+
     openButton.onClick = [this]
     {
         openAudioFiles();
@@ -295,8 +302,11 @@ MainComponent::MainComponent()
     );
 
     startTimerHz(30);
+    lastAutosaveCheckMs =
+        juce::Time::getMillisecondCounterHiRes();
     updateProjectTitle();
     updateProjectState();
+    updateRecoveryButton();
 }
 
 void MainComponent::paint(juce::Graphics& graphics)
@@ -336,8 +346,11 @@ void MainComponent::resized()
     saveProjectButton.setBounds(
         importRow.removeFromLeft(112).reduced(4)
     );
+    recoverButton.setBounds(
+        importRow.removeFromLeft(100).reduced(4)
+    );
     openButton.setBounds(
-        importRow.removeFromLeft(145).reduced(4)
+        importRow.removeFromLeft(140).reduced(4)
     );
     importRow.removeFromLeft(8);
     projectLabel.setBounds(
@@ -582,12 +595,98 @@ void MainComponent::saveProject()
     );
 }
 
+void MainComponent::recoverAutosave()
+{
+    const auto autosaveFile = getAutosaveFile();
+
+    if (! autosaveFile.existsAsFile())
+    {
+        updateRecoveryButton();
+        return;
+    }
+
+    loadProjectFile(autosaveFile, false);
+}
+
 bool MainComponent::writeProjectFile(
     const juce::File& file
 )
 {
+    const auto previousAutosave =
+        getAutosaveFile();
+
+    if (file.existsAsFile())
+    {
+        const auto backupFile =
+            getBackupFile(file);
+
+        if (backupFile.existsAsFile())
+            backupFile.deleteFile();
+
+        if (! file.copyFileTo(backupFile))
+        {
+            juce::AlertWindow::showMessageBoxAsync(
+                juce::MessageBoxIconType::WarningIcon,
+                "Sauvegarde de secours impossible",
+                "SonoForge n'a pas pu creer le fichier .backup.sonoforge. "
+                "Le projet principal n'a pas ete ecrase."
+            );
+            return false;
+        }
+    }
+
+    const auto snapshot = captureSnapshot();
+
+    if (! writeSnapshotFile(file, snapshot))
+        return false;
+
+    currentProjectFile = file;
+
+    if (previousAutosave.existsAsFile())
+        previousAutosave.deleteFile();
+
+    const auto currentAutosave =
+        getAutosaveFile();
+
+    if (currentAutosave.existsAsFile())
+        currentAutosave.deleteFile();
+
+    lastAutosaveSerialisedState =
+        juce::JSON::toString(
+            serialiseSnapshot(
+                snapshot,
+                currentAutosave
+            ),
+            false
+        );
+
+    updateProjectTitle();
+    updateRecoveryButton();
+
+    return true;
+}
+
+bool MainComponent::writeSnapshotFile(
+    const juce::File& file,
+    const ProjectSnapshot& snapshot
+)
+{
+    const auto parent =
+        file.getParentDirectory();
+
+    if (! parent.exists()
+        && ! parent.createDirectory())
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Enregistrement impossible",
+            "SonoForge n'a pas pu creer le dossier de sauvegarde."
+        );
+        return false;
+    }
+
     const auto data =
-        serialiseSnapshot(captureSnapshot(), file);
+        serialiseSnapshot(snapshot, file);
 
     const auto json =
         juce::JSON::toString(data, false);
@@ -602,14 +701,106 @@ bool MainComponent::writeProjectFile(
         return false;
     }
 
-    currentProjectFile = file;
-    updateProjectTitle();
-
     return true;
 }
 
+void MainComponent::performAutosave()
+{
+    if (audioEngine.getTrackCount() <= 0)
+        return;
+
+    const auto autosaveFile =
+        getAutosaveFile();
+
+    const auto snapshot =
+        captureSnapshot();
+
+    const auto json =
+        juce::JSON::toString(
+            serialiseSnapshot(
+                snapshot,
+                autosaveFile
+            ),
+            false
+        );
+
+    if (json == lastAutosaveSerialisedState)
+        return;
+
+    const auto parent =
+        autosaveFile.getParentDirectory();
+
+    if (! parent.exists()
+        && ! parent.createDirectory())
+    {
+        return;
+    }
+
+    if (autosaveFile.replaceWithText(json))
+    {
+        lastAutosaveSerialisedState = json;
+        updateRecoveryButton();
+    }
+}
+
+void MainComponent::updateRecoveryButton()
+{
+    const auto autosaveFile =
+        getAutosaveFile();
+
+    bool canRecover =
+        autosaveFile.existsAsFile();
+
+    if (canRecover
+        && currentProjectFile.existsAsFile())
+    {
+        canRecover =
+            autosaveFile
+                .getLastModificationTime()
+                .toMilliseconds()
+            > currentProjectFile
+                .getLastModificationTime()
+                .toMilliseconds();
+    }
+
+    recoverButton.setEnabled(canRecover);
+}
+
+juce::File MainComponent::getAutosaveFile() const
+{
+    if (currentProjectFile
+            .getFullPathName()
+            .isNotEmpty())
+    {
+        return currentProjectFile
+            .getSiblingFile(
+                currentProjectFile
+                    .getFileNameWithoutExtension()
+                + ".autosave.sonoforge"
+            );
+    }
+
+    return juce::File::getSpecialLocation(
+        juce::File::userApplicationDataDirectory
+    )
+        .getChildFile("SonoForge")
+        .getChildFile("Autosave")
+        .getChildFile("Recovery.autosave.sonoforge");
+}
+
+juce::File MainComponent::getBackupFile(
+    const juce::File& projectFile
+) const
+{
+    return projectFile.getSiblingFile(
+        projectFile.getFileNameWithoutExtension()
+        + ".backup.sonoforge"
+    );
+}
+
 bool MainComponent::loadProjectFile(
-    const juce::File& file
+    const juce::File& file,
+    const bool setAsCurrentProject
 )
 {
     juce::var data;
@@ -686,9 +877,21 @@ bool MainComponent::loadProjectFile(
     undoStack.clear();
     redoStack.clear();
 
-    currentProjectFile = file;
+    if (setAsCurrentProject)
+        currentProjectFile = file;
+
+    lastAutosaveSerialisedState =
+        juce::JSON::toString(
+            serialiseSnapshot(
+                captureSnapshot(),
+                getAutosaveFile()
+            ),
+            false
+        );
+
     updateProjectTitle();
     updateHistoryButtons();
+    updateRecoveryButton();
 
     return true;
 }
@@ -702,7 +905,7 @@ juce::var MainComponent::serialiseSnapshot(
 
     root->setProperty("format", "SonoForgeProject");
     root->setProperty("formatVersion", 1);
-    root->setProperty("appVersion", "0.5.0");
+    root->setProperty("appVersion", "0.5.1");
     root->setProperty(
         "positionSeconds",
         snapshot.positionSeconds
@@ -940,7 +1143,7 @@ juce::Result MainComponent::deserialiseSnapshot(
 
 void MainComponent::updateProjectTitle()
 {
-    auto text = juce::String("SonoForge Studio 0.5");
+    auto text = juce::String("SonoForge Studio 0.5.1");
 
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
@@ -1527,6 +1730,16 @@ void MainComponent::timerCallback()
 
     updateTimeline(current);
     pauseButton.setEnabled(audioEngine.isPlaying());
+
+    const auto now =
+        juce::Time::getMillisecondCounterHiRes();
+
+    if (now - lastAutosaveCheckMs
+        >= autosaveIntervalMs)
+    {
+        lastAutosaveCheckMs = now;
+        performAutosave();
+    }
 }
 
 juce::String MainComponent::formatTime(

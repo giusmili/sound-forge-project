@@ -32,8 +32,22 @@ private:
     void openAudioFiles();
     void openProject();
     void saveProject();
+    void recoverAutosave();
     bool writeProjectFile(const juce::File& file);
-    bool loadProjectFile(const juce::File& file);
+    bool loadProjectFile(
+        const juce::File& file,
+        bool setAsCurrentProject = true
+    );
+    bool writeSnapshotFile(
+        const juce::File& file,
+        const ProjectSnapshot& snapshot
+    );
+    void performAutosave();
+    void updateRecoveryButton();
+    [[nodiscard]] juce::File getAutosaveFile() const;
+    [[nodiscard]] juce::File getBackupFile(
+        const juce::File& projectFile
+    ) const;
     [[nodiscard]] juce::var serialiseSnapshot(
         const ProjectSnapshot& snapshot,
         const juce::File& projectFile
@@ -89,6 +103,7 @@ private:
 
     juce::TextButton openProjectButton { "Ouvrir projet" };
     juce::TextButton saveProjectButton { "Enregistrer" };
+    juce::TextButton recoverButton { "Recuperer" };
     juce::TextButton openButton { "Importer pistes" };
     juce::TextButton undoButton { "Annuler" };
     juce::TextButton redoButton { "Retablir" };
@@ -120,6 +135,9 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<juce::FileChooser> projectFileChooser;
     juce::File currentProjectFile;
+
+    double lastAutosaveCheckMs = 0.0;
+    juce::String lastAutosaveSerialisedState;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };
