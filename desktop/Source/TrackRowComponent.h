@@ -24,6 +24,8 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
 
     void setTimelineState(
         double projectLengthSeconds,
@@ -48,12 +50,21 @@ public:
     std::function<void(TrackRowComponent*)> onSelectionRequested;
 
 private:
+    enum class DragMode
+    {
+        none,
+        move,
+        trimLeft,
+        trimRight
+    };
+
     void changeListenerCallback(
         juce::ChangeBroadcaster* source
     ) override;
 
     void refreshMuteButton();
     void refreshSoloButton();
+    void updateMouseCursor(juce::Point<float> position);
 
     [[nodiscard]] juce::Rectangle<int> getWaveformBounds() const;
     [[nodiscard]] juce::Rectangle<int> getClipBounds() const;
@@ -70,9 +81,11 @@ private:
     double snapInterval = 1.0;
 
     bool selected = false;
-    bool draggingClip = false;
+    DragMode dragMode = DragMode::none;
     float dragStartX = 0.0f;
     double dragStartOffset = 0.0;
+    double dragSourceStart = 0.0;
+    double dragSourceEnd = 0.0;
     double dragViewDuration = 0.0;
 
     juce::Label nameLabel;

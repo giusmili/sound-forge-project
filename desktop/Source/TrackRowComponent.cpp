@@ -11,12 +11,15 @@ constexpr auto clipColour = 0xff244d6e;
 constexpr auto clipSelectedColour = 0xff336f9e;
 constexpr auto clipDragColour = 0xff3b7fae;
 constexpr auto selectionBorderColour = 0xffffc857;
+constexpr auto trimHandleColour = 0xffffd66b;
 constexpr auto waveformColour = 0xff81c7ff;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto muteColour = 0xffd65454;
 constexpr auto soloColour = 0xffd4a62a;
 constexpr auto playheadColour = 0xffffb347;
+constexpr int trimHandleWidth = 8;
+constexpr double minimumClipDurationSeconds = 0.01;
 }
 
 TrackRowComponent::TrackRowComponent(
@@ -132,10 +135,7 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
     const auto bounds = getLocalBounds().reduced(2);
 
     graphics.setColour(juce::Colour(rowColour));
-    graphics.fillRoundedRectangle(
-        bounds.toFloat(),
-        6.0f
-    );
+    graphics.fillRoundedRectangle(bounds.toFloat(), 6.0f);
 
     const auto waveformBounds = getWaveformBounds();
 
@@ -152,8 +152,7 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
             const auto viewEnd = viewStart + viewDuration;
 
             auto firstGrid =
-                std::floor(viewStart / snapInterval)
-                * snapInterval;
+                std::floor(viewStart / snapInterval) * snapInterval;
 
             if (firstGrid < viewStart - 0.001)
                 firstGrid += snapInterval;
@@ -171,8 +170,7 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
                     waveformBounds.getX()
                     + static_cast<int>(
                         std::round(
-                            ratio
-                            * waveformBounds.getWidth()
+                            ratio * waveformBounds.getWidth()
                         )
                     );
 
@@ -185,10 +183,11 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
         }
 
         const auto clipBounds = getClipBounds();
+        const auto isDragging = dragMode != DragMode::none;
 
         graphics.setColour(
             juce::Colour(
-                draggingClip
+                isDragging
                     ? clipDragColour
                     : selected
                         ? clipSelectedColour
@@ -210,6 +209,22 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
                 clipBounds.toFloat().reduced(1.0f),
                 4.0f,
                 2.0f
+            );
+
+            graphics.setColour(
+                juce::Colour(trimHandleColour)
+            );
+            graphics.fillRect(
+                clipBounds.getX(),
+                clipBounds.getY() + 4,
+                3,
+                juce::jmax(1, clipBounds.getHeight() - 8)
+            );
+            graphics.fillRect(
+                clipBounds.getRight() - 3,
+                clipBounds.getY() + 4,
+                3,
+                juce::jmax(1, clipBounds.getHeight() - 8)
             );
         }
 
@@ -257,8 +272,7 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
             && playheadPosition <= viewEnd)
         {
             const auto ratio =
-                (playheadPosition - viewStart)
-                / viewDuration;
+                (playheadPosition - viewStart) / viewDuration;
 
             const auto playheadX =
                 waveformBounds.getX()
@@ -341,10 +355,31 @@ void TrackRowComponent::mouseDown(
         if (onSelectionRequested)
             onSelectionRequested(this);
 
-        draggingClip = true;
         dragStartX = event.position.x;
         dragStartOffset = track.getStartOffsetSeconds();
+        dragSourceStart = track.getSourceStartSeconds();
+        dragSourceEnd = track.getSourceEndSeconds();
         dragViewDuration = viewDuration;
+
+        if (std::abs(
+                event.position.x
+                - static_cast<float>(clipBounds.getX())
+            ) <= trimHandleWidth)
+        {
+            dragMode = DragMode::trimLeft;
+        }
+        else if (std::abs(
+                     event.position.x
+                     - static_cast<float>(clipBounds.getRight())
+                 ) <= trimHandleWidth)
+        {
+            dragMode = DragMode::trimRight;
+        }
+        else
+        {
+            dragMode = DragMode::move;
+        }
+
         repaint();
         return;
     }
@@ -387,8 +422,11 @@ void TrackRowComponent::mouseDrag(
     const juce::MouseEvent& event
 )
 {
-    if (! draggingClip || dragViewDuration <= 0.0)
+    if (dragMode == DragMode::none
+        || dragViewDuration <= 0.0)
+    {
         return;
+    }
 
     const auto waveformBounds = getWaveformBounds();
 
@@ -403,19 +441,95 @@ void TrackRowComponent::mouseDrag(
         / static_cast<double>(waveformBounds.getWidth())
         * dragViewDuration;
 
-    auto newOffset = juce::jmax(
-        0.0,
-        dragStartOffset + deltaSeconds
-    );
-
-    if (snapEnabled && snapInterval > 0.0)
+    if (dragMode == DragMode::move)
     {
-        newOffset =
-            std::round(newOffset / snapInterval)
-            * snapInterval;
-    }
+        auto newOffset = juce::jmax(
+            0.0,
+            dragStartOffset + deltaSeconds
+        );
 
-    track.setStartOffsetSeconds(newOffset);
+        if (snapEnabled && snapInterval > 0.0)
+        {
+            newOffset =
+                std::round(newOffset / snapInterval)
+                * snapInterval;
+        }
+
+        track.setStartOffsetSeconds(newOffset);
+    }
+    else if (dragMode == DragMode::trimLeft)
+    {
+        const auto fixedProjectEnd =
+            dragStartOffset
+            + (dragSourceEnd - dragSourceStart);
+
+        const auto earliestProjectStart =
+            juce::jmax(
+                0.0,
+                dragStartOffset - dragSourceStart
+            );
+
+        auto newProjectStart =
+            dragStartOffset + deltaSeconds;
+
+        if (snapEnabled && snapInterval > 0.0)
+        {
+            newProjectStart =
+                std::round(newProjectStart / snapInterval)
+                * snapInterval;
+        }
+
+        newProjectStart = juce::jlimit(
+            earliestProjectStart,
+            fixedProjectEnd - minimumClipDurationSeconds,
+            newProjectStart
+        );
+
+        const auto newSourceStart =
+            dragSourceStart
+            + (newProjectStart - dragStartOffset);
+
+        track.setStartOffsetSeconds(newProjectStart);
+        track.setSourceRange(
+            newSourceStart,
+            dragSourceEnd
+        );
+    }
+    else if (dragMode == DragMode::trimRight)
+    {
+        const auto initialProjectEnd =
+            dragStartOffset
+            + (dragSourceEnd - dragSourceStart);
+
+        const auto maximumProjectEnd =
+            dragStartOffset
+            + (track.getLengthSeconds() - dragSourceStart);
+
+        auto newProjectEnd =
+            initialProjectEnd + deltaSeconds;
+
+        if (snapEnabled && snapInterval > 0.0)
+        {
+            newProjectEnd =
+                std::round(newProjectEnd / snapInterval)
+                * snapInterval;
+        }
+
+        newProjectEnd = juce::jlimit(
+            dragStartOffset + minimumClipDurationSeconds,
+            maximumProjectEnd,
+            newProjectEnd
+        );
+
+        const auto newSourceEnd =
+            dragSourceEnd
+            + (newProjectEnd - initialProjectEnd);
+
+        track.setSourceRange(
+            dragSourceStart,
+            newSourceEnd
+        );
+    }
 
     if (onClipMoved)
         onClipMoved();
@@ -424,18 +538,40 @@ void TrackRowComponent::mouseDrag(
 }
 
 void TrackRowComponent::mouseUp(
-    const juce::MouseEvent&
+    const juce::MouseEvent& event
 )
 {
-    if (! draggingClip)
+    if (dragMode == DragMode::none)
         return;
 
-    draggingClip = false;
+    dragMode = DragMode::none;
 
     if (onClipMoved)
         onClipMoved();
 
+    updateMouseCursor(event.position);
     repaint();
+}
+
+void TrackRowComponent::mouseMove(
+    const juce::MouseEvent& event
+)
+{
+    updateMouseCursor(event.position);
+}
+
+void TrackRowComponent::mouseExit(
+    const juce::MouseEvent&
+)
+{
+    if (dragMode == DragMode::none)
+    {
+        setMouseCursor(
+            juce::MouseCursor(
+                juce::MouseCursor::NormalCursor
+            )
+        );
+    }
 }
 
 void TrackRowComponent::setTimelineState(
@@ -533,6 +669,37 @@ void TrackRowComponent::refreshSoloButton()
             ? juce::Colour(soloColour)
             : juce::Colour(rowColour).brighter(0.15f)
     );
+}
+
+void TrackRowComponent::updateMouseCursor(
+    const juce::Point<float> position
+)
+{
+    if (dragMode != DragMode::none)
+        return;
+
+    const auto clipBounds = getClipBounds().toFloat();
+
+    if (clipBounds.contains(position)
+        && (std::abs(position.x - clipBounds.getX())
+                <= static_cast<float>(trimHandleWidth)
+            || std::abs(position.x - clipBounds.getRight())
+                <= static_cast<float>(trimHandleWidth)))
+    {
+        setMouseCursor(
+            juce::MouseCursor(
+                juce::MouseCursor::LeftRightResizeCursor
+            )
+        );
+    }
+    else
+    {
+        setMouseCursor(
+            juce::MouseCursor(
+                juce::MouseCursor::NormalCursor
+            )
+        );
+    }
 }
 
 juce::Rectangle<int>
