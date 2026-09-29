@@ -11,6 +11,7 @@ constexpr auto waveformColour = 0xff81c7ff;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto muteColour = 0xffd65454;
+constexpr auto soloColour = 0xffd4a62a;
 constexpr auto playheadColour = 0xffffb347;
 }
 
@@ -61,6 +62,16 @@ TrackRowComponent::TrackRowComponent(
     };
     addAndMakeVisible(muteButton);
 
+    soloButton.onClick = [this]
+    {
+        track.setSolo(! track.isSolo());
+        refreshSoloButton();
+
+        if (onSoloChanged)
+            onSoloChanged();
+    };
+    addAndMakeVisible(soloButton);
+
     volumeSlider.setRange(0.0, 1.5, 0.01);
     volumeSlider.setValue(track.getGain());
     volumeSlider.setSliderStyle(
@@ -104,6 +115,7 @@ TrackRowComponent::TrackRowComponent(
     addAndMakeVisible(panSlider);
 
     refreshMuteButton();
+    refreshSoloButton();
 }
 
 TrackRowComponent::~TrackRowComponent()
@@ -203,6 +215,10 @@ void TrackRowComponent::resized()
     muteButton.setBounds(
         buttons.removeFromLeft(46)
     );
+    buttons.removeFromLeft(6);
+    soloButton.setBounds(
+        buttons.removeFromLeft(46)
+    );
 
     controls.removeFromTop(2);
 
@@ -280,6 +296,16 @@ void TrackRowComponent::refreshMuteButton()
         juce::TextButton::buttonColourId,
         track.isMuted()
             ? juce::Colour(muteColour)
+            : juce::Colour(rowColour).brighter(0.15f)
+    );
+}
+
+void TrackRowComponent::refreshSoloButton()
+{
+    soloButton.setColour(
+        juce::TextButton::buttonColourId,
+        track.isSolo()
+            ? juce::Colour(soloColour)
             : juce::Colour(rowColour).brighter(0.15f)
     );
 }

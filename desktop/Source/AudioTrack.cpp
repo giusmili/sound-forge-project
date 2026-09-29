@@ -43,7 +43,7 @@ void AudioTrack::getNextAudioBlock(
 {
     transport.getNextAudioBlock(bufferToFill);
 
-    if (muted.load())
+    if (muted.load() || soloMuted.load())
     {
         bufferToFill.clearActiveBufferRegion();
         return;
@@ -102,6 +102,11 @@ void AudioTrack::play()
     }
 }
 
+void AudioTrack::pause()
+{
+    transport.stop();
+}
+
 void AudioTrack::stop()
 {
     transport.stop();
@@ -130,6 +135,16 @@ void AudioTrack::setMuted(const bool shouldBeMuted)
     muted.store(shouldBeMuted);
 }
 
+void AudioTrack::setSolo(const bool shouldBeSolo)
+{
+    solo.store(shouldBeSolo);
+}
+
+void AudioTrack::setSoloMuted(const bool shouldBeSoloMuted)
+{
+    soloMuted.store(shouldBeSoloMuted);
+}
+
 float AudioTrack::getGain() const noexcept
 {
     return gain.load();
@@ -143,6 +158,11 @@ float AudioTrack::getPan() const noexcept
 bool AudioTrack::isMuted() const noexcept
 {
     return muted.load();
+}
+
+bool AudioTrack::isSolo() const noexcept
+{
+    return solo.load();
 }
 
 bool AudioTrack::isPlaying() const
