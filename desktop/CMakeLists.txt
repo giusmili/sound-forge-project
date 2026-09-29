@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SonoForgeStudio VERSION 0.1.0 LANGUAGES C CXX)
+project(SonoForgeStudio VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,6 +30,10 @@ target_sources(SonoForge
         Source/MainComponent.h
         Source/AudioEngine.cpp
         Source/AudioEngine.h
+        Source/AudioTrack.cpp
+        Source/AudioTrack.h
+        Source/TrackRowComponent.cpp
+        Source/TrackRowComponent.h
 )
 
 target_compile_definitions(SonoForge

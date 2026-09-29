@@ -8,49 +8,106 @@ constexpr auto backgroundColour = 0xff111318;
 constexpr auto panelColour = 0xff1b1f26;
 constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto textColour = 0xffe8edf3;
+constexpr int trackRowHeight = 94;
 }
 
 MainComponent::MainComponent()
 {
     setOpaque(true);
-    setSize(900, 520);
+    setSize(1050, 700);
 
-    titleLabel.setText("SonoForge Studio 0.1", juce::dontSendNotification);
-    titleLabel.setFont(juce::FontOptions(24.0f, juce::Font::bold));
-    titleLabel.setColour(juce::Label::textColourId, juce::Colour(textColour));
+    titleLabel.setText(
+        "SonoForge Studio 0.2",
+        juce::dontSendNotification
+    );
+    titleLabel.setFont(
+        juce::FontOptions(24.0f, juce::Font::bold)
+    );
+    titleLabel.setColour(
+        juce::Label::textColourId,
+        juce::Colour(textColour)
+    );
     addAndMakeVisible(titleLabel);
 
-    fileLabel.setText("Aucun fichier audio charge", juce::dontSendNotification);
-    fileLabel.setColour(juce::Label::textColourId, juce::Colour(textColour).withAlpha(0.75f));
-    addAndMakeVisible(fileLabel);
+    projectLabel.setText(
+        "0 piste",
+        juce::dontSendNotification
+    );
+    projectLabel.setColour(
+        juce::Label::textColourId,
+        juce::Colour(textColour).withAlpha(0.75f)
+    );
+    addAndMakeVisible(projectLabel);
 
-    timeLabel.setText("00:00.000 / 00:00.000", juce::dontSendNotification);
-    timeLabel.setJustificationType(juce::Justification::centred);
-    timeLabel.setColour(juce::Label::textColourId, juce::Colour(textColour));
+    timeLabel.setText(
+        "00:00.000 / 00:00.000",
+        juce::dontSendNotification
+    );
+    timeLabel.setJustificationType(
+        juce::Justification::centred
+    );
+    timeLabel.setColour(
+        juce::Label::textColourId,
+        juce::Colour(textColour)
+    );
     addAndMakeVisible(timeLabel);
 
-    volumeLabel.setText("Master", juce::dontSendNotification);
-    volumeLabel.setColour(juce::Label::textColourId, juce::Colour(textColour));
-    addAndMakeVisible(volumeLabel);
+    masterLabel.setText(
+        "Master",
+        juce::dontSendNotification
+    );
+    masterLabel.setColour(
+        juce::Label::textColourId,
+        juce::Colour(textColour)
+    );
+    addAndMakeVisible(masterLabel);
 
-    for (auto* button : { &openButton, &playButton, &stopButton, &audioSettingsButton })
+    for (auto* button : {
+             &openButton,
+             &playButton,
+             &stopButton,
+             &audioSettingsButton
+         })
     {
-        button->setColour(juce::TextButton::buttonColourId, juce::Colour(panelColour));
-        button->setColour(juce::TextButton::textColourOffId, juce::Colour(textColour));
+        button->setColour(
+            juce::TextButton::buttonColourId,
+            juce::Colour(panelColour)
+        );
+        button->setColour(
+            juce::TextButton::textColourOffId,
+            juce::Colour(textColour)
+        );
         addAndMakeVisible(*button);
     }
 
     playButton.setEnabled(false);
     stopButton.setEnabled(false);
 
-    volumeSlider.setRange(0.0, 1.0, 0.01);
-    volumeSlider.setValue(0.8);
-    volumeSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-    volumeSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 64, 24);
-    volumeSlider.setColour(juce::Slider::trackColourId, juce::Colour(accentColour));
-    addAndMakeVisible(volumeSlider);
+    masterSlider.setRange(0.0, 1.0, 0.01);
+    masterSlider.setValue(0.8);
+    masterSlider.setSliderStyle(
+        juce::Slider::LinearHorizontal
+    );
+    masterSlider.setTextBoxStyle(
+        juce::Slider::TextBoxRight,
+        false,
+        64,
+        24
+    );
+    masterSlider.setColour(
+        juce::Slider::trackColourId,
+        juce::Colour(accentColour)
+    );
+    addAndMakeVisible(masterSlider);
 
-    openButton.onClick = [this] { openAudioFile(); };
+    trackViewport.setViewedComponent(&trackList, false);
+    trackViewport.setScrollBarsShown(true, false);
+    addAndMakeVisible(trackViewport);
+
+    openButton.onClick = [this]
+    {
+        openAudioFiles();
+    };
 
     playButton.onClick = [this]
     {
@@ -64,14 +121,21 @@ MainComponent::MainComponent()
         stopButton.setEnabled(false);
     };
 
-    audioSettingsButton.onClick = [this] { showAudioSettings(); };
-
-    volumeSlider.onValueChange = [this]
+    audioSettingsButton.onClick = [this]
     {
-        audioEngine.setGain(static_cast<float>(volumeSlider.getValue()));
+        showAudioSettings();
     };
 
-    audioEngine.setGain(static_cast<float>(volumeSlider.getValue()));
+    masterSlider.onValueChange = [this]
+    {
+        audioEngine.setMasterGain(
+            static_cast<float>(masterSlider.getValue())
+        );
+    };
+
+    audioEngine.setMasterGain(
+        static_cast<float>(masterSlider.getValue())
+    );
 
     startTimerHz(20);
 }
@@ -80,109 +144,197 @@ void MainComponent::paint(juce::Graphics& graphics)
 {
     graphics.fillAll(juce::Colour(backgroundColour));
 
-    auto panel = getLocalBounds().reduced(20).withTrimmedTop(80);
+    auto panel = getLocalBounds()
+                     .reduced(20)
+                     .withTrimmedTop(76);
+
     graphics.setColour(juce::Colour(panelColour));
-    graphics.fillRoundedRectangle(panel.toFloat(), 8.0f);
+    graphics.fillRoundedRectangle(
+        panel.toFloat(),
+        8.0f
+    );
 }
 
 void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced(20);
 
-    auto header = area.removeFromTop(54);
-    titleLabel.setBounds(header.removeFromLeft(350));
-    audioSettingsButton.setBounds(header.removeFromRight(100).reduced(4));
+    auto header = area.removeFromTop(52);
+    titleLabel.setBounds(
+        header.removeFromLeft(340)
+    );
+    audioSettingsButton.setBounds(
+        header.removeFromRight(100).reduced(4)
+    );
 
-    area.removeFromTop(26);
+    area.removeFromTop(24);
+    area.reduce(18, 18);
 
-    auto panel = area.reduced(20);
+    auto importRow = area.removeFromTop(44);
+    openButton.setBounds(
+        importRow.removeFromLeft(160).reduced(4)
+    );
+    importRow.removeFromLeft(8);
+    projectLabel.setBounds(
+        importRow.removeFromLeft(180)
+    );
 
-    auto fileRow = panel.removeFromTop(42);
-    openButton.setBounds(fileRow.removeFromLeft(150).reduced(4));
-    fileRow.removeFromLeft(10);
-    fileLabel.setBounds(fileRow.reduced(4));
+    area.removeFromTop(14);
 
-    panel.removeFromTop(35);
+    auto transportRow = area.removeFromTop(58);
+    playButton.setBounds(
+        transportRow.removeFromLeft(90).reduced(5)
+    );
+    stopButton.setBounds(
+        transportRow.removeFromLeft(90).reduced(5)
+    );
+    transportRow.removeFromLeft(14);
+    timeLabel.setBounds(
+        transportRow.removeFromLeft(280).reduced(5)
+    );
+    transportRow.removeFromLeft(18);
+    masterLabel.setBounds(
+        transportRow.removeFromLeft(58)
+    );
+    masterSlider.setBounds(
+        transportRow.removeFromLeft(260).reduced(4)
+    );
 
-    auto transportRow = panel.removeFromTop(70);
-    playButton.setBounds(transportRow.removeFromLeft(100).reduced(6));
-    stopButton.setBounds(transportRow.removeFromLeft(100).reduced(6));
-    transportRow.removeFromLeft(20);
-    timeLabel.setBounds(transportRow.removeFromLeft(280).reduced(6));
+    area.removeFromTop(12);
+    trackViewport.setBounds(area);
 
-    panel.removeFromTop(35);
-
-    auto volumeRow = panel.removeFromTop(60);
-    volumeLabel.setBounds(volumeRow.removeFromLeft(80));
-    volumeSlider.setBounds(volumeRow.removeFromLeft(420));
+    layoutTracks();
 }
 
-void MainComponent::openAudioFile()
+void MainComponent::openAudioFiles()
 {
     fileChooser = std::make_unique<juce::FileChooser>(
-        "Choisir un fichier audio",
+        "Choisir une ou plusieurs pistes audio",
         juce::File {},
         "*.wav;*.mp3;*.aiff;*.aif;*.flac;*.ogg"
     );
 
-    auto safeThis = juce::Component::SafePointer<MainComponent>(this);
+    auto safeThis =
+        juce::Component::SafePointer<MainComponent>(this);
 
     fileChooser->launchAsync(
         juce::FileBrowserComponent::openMode
-            | juce::FileBrowserComponent::canSelectFiles,
+            | juce::FileBrowserComponent::canSelectFiles
+            | juce::FileBrowserComponent::canSelectMultipleItems,
         [safeThis](const juce::FileChooser& chooser)
         {
             if (safeThis == nullptr)
                 return;
 
-            const auto file = chooser.getResult();
+            const auto files = chooser.getResults();
 
-            if (! file.existsAsFile())
-                return;
-
-            const auto result = safeThis->audioEngine.loadFile(file);
-
-            if (result.wasOk())
+            for (const auto& file : files)
             {
-                safeThis->fileLabel.setText(
-                    file.getFileName(),
-                    juce::dontSendNotification
-                );
-                safeThis->playButton.setEnabled(true);
-                safeThis->stopButton.setEnabled(false);
+                if (! file.existsAsFile())
+                    continue;
+
+                AudioTrack* createdTrack = nullptr;
+
+                const auto result =
+                    safeThis->audioEngine.addTrackFromFile(
+                        file,
+                        createdTrack
+                    );
+
+                if (result.wasOk()
+                    && createdTrack != nullptr)
+                {
+                    safeThis->addTrackRow(*createdTrack);
+                }
+                else
+                {
+                    juce::AlertWindow::showMessageBoxAsync(
+                        juce::MessageBoxIconType::WarningIcon,
+                        "Import audio impossible",
+                        file.getFileName()
+                            + "\n\n"
+                            + result.getErrorMessage()
+                    );
+                }
             }
-            else
-            {
-                juce::AlertWindow::showMessageBoxAsync(
-                    juce::MessageBoxIconType::WarningIcon,
-                    "Import audio impossible",
-                    result.getErrorMessage()
-                );
-            }
+
+            safeThis->playButton.setEnabled(
+                safeThis->audioEngine.getTrackCount() > 0
+            );
+
+            safeThis->projectLabel.setText(
+                juce::String(
+                    safeThis->audioEngine.getTrackCount()
+                )
+                    + " piste(s)",
+                juce::dontSendNotification
+            );
+
+            safeThis->layoutTracks();
         }
     );
 }
 
+void MainComponent::addTrackRow(AudioTrack& track)
+{
+    auto* row = trackRows.add(
+        new TrackRowComponent(track)
+    );
+
+    trackList.addAndMakeVisible(row);
+    layoutTracks();
+}
+
+void MainComponent::layoutTracks()
+{
+    const auto width =
+        juce::jmax(320, trackViewport.getWidth() - 14);
+
+    const auto height =
+        juce::jmax(
+            trackViewport.getHeight(),
+            trackRows.size() * trackRowHeight
+        );
+
+    trackList.setSize(width, height);
+
+    int y = 0;
+
+    for (auto* row : trackRows)
+    {
+        row->setBounds(
+            0,
+            y,
+            width,
+            trackRowHeight - 6
+        );
+
+        y += trackRowHeight;
+    }
+}
+
 void MainComponent::showAudioSettings()
 {
-    auto* selector = new juce::AudioDeviceSelectorComponent(
-        audioEngine.getDeviceManager(),
-        0,
-        0,
-        0,
-        2,
-        false,
-        false,
-        true,
-        false
-    );
+    auto* selector =
+        new juce::AudioDeviceSelectorComponent(
+            audioEngine.getDeviceManager(),
+            0,
+            0,
+            0,
+            2,
+            false,
+            false,
+            true,
+            false
+        );
 
     selector->setSize(540, 420);
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(selector);
     options.dialogTitle = "Configuration audio";
-    options.dialogBackgroundColour = juce::Colour(panelColour);
+    options.dialogBackgroundColour =
+        juce::Colour(panelColour);
     options.escapeKeyTriggersCloseButton = true;
     options.useNativeTitleBar = true;
     options.resizable = false;
@@ -192,25 +344,39 @@ void MainComponent::showAudioSettings()
 
 void MainComponent::timerCallback()
 {
-    const auto current = audioEngine.getPositionSeconds();
-    const auto length = audioEngine.getLengthSeconds();
+    const auto current =
+        audioEngine.getPositionSeconds();
+    const auto length =
+        audioEngine.getLengthSeconds();
 
     timeLabel.setText(
-        formatTime(current) + " / " + formatTime(length),
+        formatTime(current)
+            + " / "
+            + formatTime(length),
         juce::dontSendNotification
     );
 
-    if (! audioEngine.isPlaying() && current >= length && length > 0.0)
+    if (! audioEngine.isPlaying())
         stopButton.setEnabled(false);
 }
 
-juce::String MainComponent::formatTime(const double seconds)
+juce::String MainComponent::formatTime(
+    const double seconds
+)
 {
-    const auto totalMilliseconds = static_cast<int64_t>(std::round(seconds * 1000.0));
-    const auto minutes = totalMilliseconds / 60000;
-    const auto remainingMilliseconds = totalMilliseconds % 60000;
-    const auto wholeSeconds = remainingMilliseconds / 1000;
-    const auto milliseconds = remainingMilliseconds % 1000;
+    const auto totalMilliseconds =
+        static_cast<int64_t>(
+            std::round(seconds * 1000.0)
+        );
+
+    const auto minutes =
+        totalMilliseconds / 60000;
+    const auto remainingMilliseconds =
+        totalMilliseconds % 60000;
+    const auto wholeSeconds =
+        remainingMilliseconds / 1000;
+    const auto milliseconds =
+        remainingMilliseconds % 1000;
 
     return juce::String(minutes).paddedLeft('0', 2)
         + ":"

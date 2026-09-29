@@ -13,86 +13,133 @@ AudioEngine::AudioEngine()
 
     jassert(error.isEmpty());
 
-    sourcePlayer.setSource(&transport);
+    sourcePlayer.setSource(this);
     deviceManager.addAudioCallback(&sourcePlayer);
 }
 
 AudioEngine::~AudioEngine()
 {
-    transport.stop();
-    transport.setSource(nullptr);
-
     deviceManager.removeAudioCallback(&sourcePlayer);
     sourcePlayer.setSource(nullptr);
 
-    readerSource.reset();
+    mixer.removeAllInputs();
+    tracks.clear();
 }
 
-juce::Result AudioEngine::loadFile(const juce::File& file)
+void AudioEngine::prepareToPlay(
+    const int samplesPerBlockExpected,
+    const double sampleRate
+)
 {
-    stop();
-    transport.setSource(nullptr);
-    readerSource.reset();
+    mixer.prepareToPlay(samplesPerBlockExpected, sampleRate);
+}
 
-    std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(file));
+void AudioEngine::releaseResources()
+{
+    mixer.releaseResources();
+}
+
+void AudioEngine::getNextAudioBlock(
+    const juce::AudioSourceChannelInfo& bufferToFill
+)
+{
+    mixer.getNextAudioBlock(bufferToFill);
+
+    bufferToFill.buffer->applyGain(
+        bufferToFill.startSample,
+        bufferToFill.numSamples,
+        juce::jlimit(0.0f, 1.0f, masterGain.load())
+    );
+}
+
+juce::Result AudioEngine::addTrackFromFile(
+    const juce::File& file,
+    AudioTrack*& createdTrack
+)
+{
+    createdTrack = nullptr;
+
+    std::unique_ptr<juce::AudioFormatReader> reader(
+        formatManager.createReaderFor(file)
+    );
 
     if (reader == nullptr)
-        return juce::Result::fail("Format audio non pris en charge ou fichier illisible.");
+        return juce::Result::fail(
+            "Format audio non pris en charge ou fichier illisible."
+        );
 
     const auto sourceSampleRate = reader->sampleRate;
-    auto newReaderSource = std::make_unique<juce::AudioFormatReaderSource>(
+
+    auto readerSource = std::make_unique<juce::AudioFormatReaderSource>(
         reader.release(),
         true
     );
 
-    transport.setSource(
-        newReaderSource.get(),
-        32768,
-        nullptr,
+    auto track = std::make_unique<AudioTrack>(
+        file.getFileNameWithoutExtension(),
+        std::move(readerSource),
         sourceSampleRate
     );
 
-    readerSource = std::move(newReaderSource);
-    transport.setPosition(0.0);
+    createdTrack = track.get();
+    tracks.push_back(std::move(track));
+
+    mixer.addInputSource(createdTrack, false);
 
     return juce::Result::ok();
 }
 
 void AudioEngine::play()
 {
-    if (readerSource != nullptr)
-        transport.start();
+    for (auto& track : tracks)
+        track->play();
 }
 
 void AudioEngine::stop()
 {
-    transport.stop();
-    transport.setPosition(0.0);
+    for (auto& track : tracks)
+        track->stop();
 }
 
-void AudioEngine::setGain(const float gain)
+void AudioEngine::setMasterGain(const float gain)
 {
-    transport.setGain(juce::jlimit(0.0f, 1.0f, gain));
-}
-
-void AudioEngine::setPositionSeconds(const double seconds)
-{
-    transport.setPosition(juce::jlimit(0.0, getLengthSeconds(), seconds));
+    masterGain.store(juce::jlimit(0.0f, 1.0f, gain));
 }
 
 bool AudioEngine::isPlaying() const
 {
-    return transport.isPlaying();
+    for (const auto& track : tracks)
+    {
+        if (track->isPlaying())
+            return true;
+    }
+
+    return false;
 }
 
 double AudioEngine::getPositionSeconds() const
 {
-    return transport.getCurrentPosition();
+    double position = 0.0;
+
+    for (const auto& track : tracks)
+        position = juce::jmax(position, track->getPositionSeconds());
+
+    return position;
 }
 
 double AudioEngine::getLengthSeconds() const
 {
-    return transport.getLengthInSeconds();
+    double length = 0.0;
+
+    for (const auto& track : tracks)
+        length = juce::jmax(length, track->getLengthSeconds());
+
+    return length;
+}
+
+int AudioEngine::getTrackCount() const noexcept
+{
+    return static_cast<int>(tracks.size());
 }
 
 juce::AudioDeviceManager& AudioEngine::getDeviceManager() noexcept
