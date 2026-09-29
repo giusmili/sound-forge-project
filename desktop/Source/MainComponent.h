@@ -4,6 +4,7 @@
 
 #include "AudioEngine.h"
 #include "TimelineRulerComponent.h"
+#include "MixerComponent.h"
 #include "TrackRowComponent.h"
 
 class MainComponent final : public juce::Component,
@@ -39,6 +40,7 @@ private:
     juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
     juce::TextButton audioSettingsButton { "Audio" };
+    juce::TextButton mixerButton { "Mixer" };
 
     juce::Slider masterSlider;
 
@@ -46,6 +48,8 @@ private:
     juce::Component trackList;
     juce::Viewport trackViewport;
     juce::OwnedArray<TrackRowComponent> trackRows;
+    MixerComponent mixer;
+    bool mixerVisible = true;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 
