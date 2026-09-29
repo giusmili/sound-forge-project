@@ -18,6 +18,10 @@ AudioTrack::AudioTrack(
         nullptr,
         sourceSampleRate
     );
+
+    sourceEndSeconds.store(
+        transport.getLengthInSeconds()
+    );
 }
 
 AudioTrack::~AudioTrack()
@@ -100,28 +104,36 @@ void AudioTrack::syncToProjectPosition(
     const bool projectPlaying
 )
 {
-    const auto localPosition =
+    const auto clipLocalPosition =
         projectPositionSeconds - startOffsetSeconds.load();
 
-    const auto length = getLengthSeconds();
+    const auto clipDuration = getClipDurationSeconds();
+    const auto sourceStart = sourceStartSeconds.load();
+    const auto sourceEnd = sourceEndSeconds.load();
 
-    if (localPosition < 0.0 || localPosition >= length)
+    if (clipLocalPosition < 0.0
+        || clipLocalPosition >= clipDuration)
     {
         if (transport.isPlaying())
             transport.stop();
 
         transport.setPosition(
-            localPosition < 0.0 ? 0.0 : length
+            clipLocalPosition < 0.0
+                ? sourceStart
+                : sourceEnd
         );
 
         return;
     }
 
+    const auto sourcePosition =
+        sourceStart + clipLocalPosition;
+
     const auto currentPosition =
         transport.getCurrentPosition();
 
-    if (std::abs(currentPosition - localPosition) > 0.05)
-        transport.setPosition(localPosition);
+    if (std::abs(currentPosition - sourcePosition) > 0.05)
+        transport.setPosition(sourcePosition);
 
     if (projectPlaying)
     {
@@ -166,6 +178,29 @@ void AudioTrack::setStartOffsetSeconds(const double seconds)
     );
 }
 
+void AudioTrack::setSourceRange(
+    const double startSeconds,
+    const double endSeconds
+)
+{
+    const auto sourceLength = getLengthSeconds();
+
+    const auto safeStart = juce::jlimit(
+        0.0,
+        sourceLength,
+        startSeconds
+    );
+
+    const auto safeEnd = juce::jlimit(
+        safeStart,
+        sourceLength,
+        endSeconds
+    );
+
+    sourceStartSeconds.store(safeStart);
+    sourceEndSeconds.store(safeEnd);
+}
+
 float AudioTrack::getGain() const noexcept
 {
     return gain.load();
@@ -206,9 +241,29 @@ double AudioTrack::getStartOffsetSeconds() const noexcept
     return startOffsetSeconds.load();
 }
 
+double AudioTrack::getSourceStartSeconds() const noexcept
+{
+    return sourceStartSeconds.load();
+}
+
+double AudioTrack::getSourceEndSeconds() const noexcept
+{
+    return sourceEndSeconds.load();
+}
+
+double AudioTrack::getClipDurationSeconds() const noexcept
+{
+    return juce::jmax(
+        0.0,
+        sourceEndSeconds.load()
+            - sourceStartSeconds.load()
+    );
+}
+
 double AudioTrack::getProjectEndSeconds() const noexcept
 {
-    return getStartOffsetSeconds() + getLengthSeconds();
+    return getStartOffsetSeconds()
+        + getClipDurationSeconds();
 }
 
 const juce::String& AudioTrack::getName() const noexcept

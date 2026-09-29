@@ -111,9 +111,11 @@ juce::Result AudioEngine::addTrackFromFile(
     );
 
     if (reader == nullptr)
+    {
         return juce::Result::fail(
             "Format audio non pris en charge ou fichier illisible."
         );
+    }
 
     const auto sourceSampleRate = reader->sampleRate;
 
@@ -135,18 +137,7 @@ juce::Result AudioEngine::addTrackFromFile(
     tracks.push_back(std::move(track));
 
     mixer.addInputSource(createdTrack, false);
-
-    const auto anySolo = std::any_of(
-        tracks.begin(),
-        tracks.end(),
-        [](const auto& item)
-        {
-            return item->isSolo();
-        }
-    );
-
-    for (auto& item : tracks)
-        item->setSoloMuted(anySolo && ! item->isSolo());
+    refreshSoloStateUnlocked();
 
     createdTrack->syncToProjectPosition(
         projectPositionSeconds.load(),
@@ -154,6 +145,83 @@ juce::Result AudioEngine::addTrackFromFile(
     );
 
     return juce::Result::ok();
+}
+
+juce::Result AudioEngine::duplicateTrack(
+    const AudioTrack& sourceTrack,
+    AudioTrack*& createdTrack
+)
+{
+    const auto result = addTrackFromFile(
+        sourceTrack.getSourceFile(),
+        createdTrack
+    );
+
+    if (result.failed() || createdTrack == nullptr)
+        return result;
+
+    createdTrack->setStartOffsetSeconds(
+        sourceTrack.getStartOffsetSeconds()
+    );
+
+    createdTrack->setSourceRange(
+        sourceTrack.getSourceStartSeconds(),
+        sourceTrack.getSourceEndSeconds()
+    );
+
+    createdTrack->setGain(sourceTrack.getGain());
+    createdTrack->setPan(sourceTrack.getPan());
+    createdTrack->setMuted(sourceTrack.isMuted());
+    createdTrack->setSolo(sourceTrack.isSolo());
+
+    refreshSoloState();
+    refreshTrackAlignment();
+
+    return juce::Result::ok();
+}
+
+bool AudioEngine::removeTrack(AudioTrack* trackToRemove)
+{
+    if (trackToRemove == nullptr)
+        return false;
+
+    const juce::ScopedLock lock(trackLock);
+
+    const auto iterator = std::find_if(
+        tracks.begin(),
+        tracks.end(),
+        [trackToRemove](const auto& track)
+        {
+            return track.get() == trackToRemove;
+        }
+    );
+
+    if (iterator == tracks.end())
+        return false;
+
+    mixer.removeInputSource(trackToRemove);
+    tracks.erase(iterator);
+
+    refreshSoloStateUnlocked();
+
+    const auto newLength = getLengthSecondsUnlocked();
+
+    if (tracks.empty())
+    {
+        playing.store(false);
+        projectPositionSeconds.store(0.0);
+    }
+    else if (projectPositionSeconds.load() > newLength)
+    {
+        projectPositionSeconds.store(newLength);
+    }
+
+    syncTracksUnlocked(
+        projectPositionSeconds.load(),
+        playing.load()
+    );
+
+    return true;
 }
 
 void AudioEngine::play()
@@ -227,18 +295,7 @@ void AudioEngine::setMasterGain(const float gain)
 void AudioEngine::refreshSoloState()
 {
     const juce::ScopedLock lock(trackLock);
-
-    const auto anySolo = std::any_of(
-        tracks.begin(),
-        tracks.end(),
-        [](const auto& track)
-        {
-            return track->isSolo();
-        }
-    );
-
-    for (auto& track : tracks)
-        track->setSoloMuted(anySolo && ! track->isSolo());
+    refreshSoloStateUnlocked();
 }
 
 void AudioEngine::refreshTrackAlignment()
@@ -315,4 +372,19 @@ void AudioEngine::syncTracksUnlocked(
             projectPlaying
         );
     }
+}
+
+void AudioEngine::refreshSoloStateUnlocked()
+{
+    const auto anySolo = std::any_of(
+        tracks.begin(),
+        tracks.end(),
+        [](const auto& track)
+        {
+            return track->isSolo();
+        }
+    );
+
+    for (auto& track : tracks)
+        track->setSoloMuted(anySolo && ! track->isSolo());
 }

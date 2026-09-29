@@ -37,9 +37,15 @@ public:
         double intervalSeconds
     );
 
+    void setSelected(bool shouldBeSelected);
+
+    [[nodiscard]] bool isSelected() const noexcept;
+    [[nodiscard]] AudioTrack& getTrack() noexcept;
+
     std::function<void(double)> onSeek;
     std::function<void()> onSoloChanged;
     std::function<void()> onClipMoved;
+    std::function<void(TrackRowComponent*)> onSelectionRequested;
 
 private:
     void changeListenerCallback(
@@ -63,6 +69,7 @@ private:
     bool snapEnabled = true;
     double snapInterval = 1.0;
 
+    bool selected = false;
     bool draggingClip = false;
     float dragStartX = 0.0f;
     double dragStartOffset = 0.0;

@@ -19,6 +19,13 @@ public:
         AudioTrack*& createdTrack
     );
 
+    juce::Result duplicateTrack(
+        const AudioTrack& sourceTrack,
+        AudioTrack*& createdTrack
+    );
+
+    bool removeTrack(AudioTrack* trackToRemove);
+
     void play();
     void pause();
     void stop();
@@ -39,6 +46,7 @@ public:
 private:
     [[nodiscard]] double getLengthSecondsUnlocked() const;
     void syncTracksUnlocked(double projectPosition, bool projectPlaying);
+    void refreshSoloStateUnlocked();
 
     juce::AudioFormatManager formatManager;
     juce::AudioThumbnailCache thumbnailCache { 64 };
