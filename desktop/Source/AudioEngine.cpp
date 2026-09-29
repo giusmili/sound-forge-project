@@ -5,28 +5,109 @@
 AudioEngine::AudioEngine()
 {
     formatManager.registerBasicFormats();
+    recordingThread.startThread();
 
-    const auto error = deviceManager.initialise(
-        0,
+    auto error = deviceManager.initialise(
+        1,
         2,
         nullptr,
         true
     );
 
+    if (error.isNotEmpty())
+    {
+        error = deviceManager.initialise(
+            0,
+            2,
+            nullptr,
+            true
+        );
+    }
+
     jassert(error.isEmpty());
 
-    sourcePlayer.setSource(this);
-    deviceManager.addAudioCallback(&sourcePlayer);
+    deviceManager.addAudioCallback(this);
 }
 
 AudioEngine::~AudioEngine()
 {
-    deviceManager.removeAudioCallback(&sourcePlayer);
-    sourcePlayer.setSource(nullptr);
+    deviceManager.removeAudioCallback(this);
+
+    activeWriter.store(nullptr);
+    threadedWriter.reset();
+    recording.store(false);
+    recordingThread.stopThread(2000);
 
     const juce::ScopedLock lock(trackLock);
     mixer.removeAllInputs();
     tracks.clear();
+}
+
+void AudioEngine::audioDeviceIOCallbackWithContext(
+    const float* const* inputChannelData,
+    const int numInputChannels,
+    float* const* outputChannelData,
+    const int numOutputChannels,
+    const int numSamples,
+    const juce::AudioIODeviceCallbackContext&
+)
+{
+    if (numOutputChannels > 0)
+    {
+        juce::AudioBuffer<float> outputBuffer(
+            outputChannelData,
+            numOutputChannels,
+            numSamples
+        );
+
+        outputBuffer.clear();
+
+        juce::AudioSourceChannelInfo info(
+            &outputBuffer,
+            0,
+            numSamples
+        );
+
+        getNextAudioBlock(info);
+    }
+
+    if (recording.load())
+    {
+        if (auto* writer = activeWriter.load())
+        {
+            if (numInputChannels > 0)
+                writer->write(inputChannelData, numSamples);
+        }
+    }
+}
+
+void AudioEngine::audioDeviceAboutToStart(
+    juce::AudioIODevice* device
+)
+{
+    if (device == nullptr)
+        return;
+
+    inputSampleRate.store(
+        device->getCurrentSampleRate()
+    );
+
+    activeInputChannels.store(
+        device->getActiveInputChannels()
+            .countNumberOfSetBits()
+    );
+
+    prepareToPlay(
+        device->getCurrentBufferSizeSamples(),
+        device->getCurrentSampleRate()
+    );
+}
+
+void AudioEngine::audioDeviceStopped()
+{
+    inputSampleRate.store(0.0);
+    activeInputChannels.store(0);
+    releaseResources();
 }
 
 void AudioEngine::prepareToPlay(
@@ -87,7 +168,8 @@ void AudioEngine::getNextAudioBlock(
     const auto projectLength =
         getLengthSecondsUnlocked();
 
-    if (nextPosition >= projectLength)
+    if (nextPosition >= projectLength
+        && ! recording.load())
     {
         projectPositionSeconds.store(projectLength);
         playing.store(false);
@@ -409,6 +491,135 @@ std::vector<AudioTrack*> AudioEngine::getTrackPointers() const
     return result;
 }
 
+juce::Result AudioEngine::startRecording(
+    const juce::File& file
+)
+{
+    if (recording.load())
+    {
+        return juce::Result::fail(
+            "Un enregistrement est deja en cours."
+        );
+    }
+
+    const auto sampleRate =
+        inputSampleRate.load();
+
+    const auto channels =
+        activeInputChannels.load();
+
+    if (sampleRate <= 0.0 || channels <= 0)
+    {
+        return juce::Result::fail(
+            "Aucune entree audio active. Configurez une entree dans Audio."
+        );
+    }
+
+    const auto parent = file.getParentDirectory();
+
+    if (! parent.exists()
+        && ! parent.createDirectory())
+    {
+        return juce::Result::fail(
+            "Impossible de creer le dossier d'enregistrement."
+        );
+    }
+
+    if (file.existsAsFile()
+        && ! file.deleteFile())
+    {
+        return juce::Result::fail(
+            "Impossible de remplacer le fichier d'enregistrement."
+        );
+    }
+
+    auto stream = file.createOutputStream();
+
+    if (stream == nullptr)
+    {
+        return juce::Result::fail(
+            "Impossible de creer le fichier WAV."
+        );
+    }
+
+    juce::WavAudioFormat wavFormat;
+
+    auto* writer = wavFormat.createWriterFor(
+        stream.get(),
+        sampleRate,
+        static_cast<unsigned int>(channels),
+        24,
+        {},
+        0
+    );
+
+    if (writer == nullptr)
+    {
+        return juce::Result::fail(
+            "Impossible d'initialiser l'ecriture WAV."
+        );
+    }
+
+    stream.release();
+
+    threadedWriter =
+        std::make_unique<
+            juce::AudioFormatWriter::ThreadedWriter
+        >(
+            writer,
+            recordingThread,
+            32768
+        );
+
+    recordingStartPosition.store(
+        projectPositionSeconds.load()
+    );
+
+    activeWriter.store(threadedWriter.get());
+    recording.store(true);
+    playing.store(true);
+
+    const juce::ScopedLock lock(trackLock);
+
+    syncTracksUnlocked(
+        projectPositionSeconds.load(),
+        true
+    );
+
+    return juce::Result::ok();
+}
+
+void AudioEngine::stopRecording()
+{
+    activeWriter.store(nullptr);
+    recording.store(false);
+    threadedWriter.reset();
+    playing.store(false);
+
+    const juce::ScopedLock lock(trackLock);
+
+    syncTracksUnlocked(
+        projectPositionSeconds.load(),
+        false
+    );
+}
+
+bool AudioEngine::isRecording() const noexcept
+{
+    return recording.load();
+}
+
+double AudioEngine::getRecordingStartPosition() const noexcept
+{
+    return recordingStartPosition.load();
+}
+
+bool AudioEngine::hasAudioInput() const noexcept
+{
+    return inputSampleRate.load() > 0.0
+        && activeInputChannels.load() > 0;
+}
+
 void AudioEngine::play()
 {
     const juce::ScopedLock lock(trackLock);
@@ -434,6 +645,9 @@ void AudioEngine::play()
 
 void AudioEngine::pause()
 {
+    if (recording.load())
+        return;
+
     playing.store(false);
 
     const juce::ScopedLock lock(trackLock);
@@ -445,6 +659,9 @@ void AudioEngine::pause()
 
 void AudioEngine::stop()
 {
+    if (recording.load())
+        stopRecording();
+
     playing.store(false);
     projectPositionSeconds.store(0.0);
 

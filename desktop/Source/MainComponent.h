@@ -90,6 +90,10 @@ private:
     void duplicateSelectedClip();
     void splitSelectedClip();
     void deleteSelectedClip();
+    void toggleRecording();
+    void startAudioRecording();
+    void finishAudioRecording();
+    [[nodiscard]] juce::File getRecordingDirectory() const;
 
     [[nodiscard]] ProjectSnapshot captureSnapshot() const;
     void pushUndoSnapshot(const ProjectSnapshot& snapshot);
@@ -133,6 +137,7 @@ private:
     juce::TextButton playButton { "Play" };
     juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
+    juce::TextButton recordButton { "Record" };
     juce::TextButton audioSettingsButton { "Audio" };
     juce::TextButton snapButton { "Snap Grid" };
 
@@ -156,6 +161,10 @@ private:
     std::unique_ptr<juce::FileChooser> projectFileChooser;
     juce::File currentProjectFile;
     juce::StringArray recentProjectPaths;
+
+    juce::File activeRecordingFile;
+    double activeRecordingStart = 0.0;
+    std::unique_ptr<ProjectSnapshot> recordingUndoSnapshot;
 
     double lastAutosaveCheckMs = 0.0;
     juce::String lastAutosaveSerialisedState;

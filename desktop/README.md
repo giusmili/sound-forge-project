@@ -1,112 +1,104 @@
-# SonoForge Studio Desktop 0.5.2
+# SonoForge Studio Desktop 0.6
 
-Cette iteration securise la fermeture de l'application et ajoute les projets recents.
+Cette iteration ajoute le premier enregistrement audio natif de SonoForge.
 
-## Modifications non enregistrees
+## Enregistrement audio
 
-SonoForge compare l'etat courant du projet a la derniere sauvegarde manuelle ou au dernier projet ouvert.
+Le bouton Record utilise l'entree audio active du systeme.
 
-Les modifications prises en compte comprennent notamment :
+Au demarrage :
 
-- import, suppression et duplication de clips
-- deplacement, Split et Trim
-- plages source non destructives
-- gain et pan
-- Mute et Solo
-- BPM
-- grille et snapping
-- niveau Master
+- SonoForge memorise la position du playhead
+- la lecture des pistes existantes continue
+- l'entree audio est ecrite dans un fichier WAV 24 bits
+- l'ecriture disque est effectuee par un ThreadedWriter en arriere-plan
+- l'horloge projet continue d'avancer pendant l'enregistrement
 
-La simple navigation, comme le deplacement du playhead, le zoom ou la position de vue, ne marque pas le projet comme modifie.
+A l'arret :
 
-Lorsqu'un projet contient des changements non enregistres, le titre affiche un astérisque :
+- le fichier WAV est finalise
+- le fichier est importe automatiquement comme nouvelle piste
+- le clip est place a la position exacte de depart de l'enregistrement
+- l'action peut etre annulee avec Undo
 
-```text
-SonoForge Studio 0.5.2 - MonProjet *
-```
+## Dossiers d'enregistrement
 
-## Fermeture securisee
-
-Si l'utilisateur ferme SonoForge avec des changements non sauvegardes, trois choix sont proposes :
+Pour un projet deja sauvegarde :
 
 ```text
-Enregistrer
-Ne pas enregistrer
-Annuler
+MonProjet/
+├── MonProjet.sonoforge
+└── Audio/
+    └── Recording_<timestamp>.wav
 ```
 
-Enregistrer effectue la sauvegarde avant de quitter. Pour un projet sans nom, le selecteur de fichier est affiche.
-
-Annuler laisse l'application ouverte.
-
-## Changement de projet securise
-
-La meme protection est appliquee avant :
-
-- l'ouverture d'un autre projet
-- l'ouverture d'un projet recent
-- la recuperation d'un autosave
-
-Une session modifiee ne peut donc pas etre remplacee silencieusement.
-
-## Projets recents
-
-SonoForge conserve jusqu'a 8 projets recents entre les lancements.
-
-Ils sont presentes dans la liste Projets recents en haut de la fenetre.
-
-Le fichier de configuration est stocke dans le dossier de donnees utilisateur SonoForge :
+Pour une session sans fichier projet :
 
 ```text
-SonoForge/recent-projects.txt
+Documents/
+└── SonoForge Recordings/
+    └── Recording_<timestamp>.wav
 ```
 
-Les chemins devenus invalides sont retires automatiquement de la liste.
+## Configuration audio
 
-## Autosave et backup
+SonoForge tente maintenant d'ouvrir :
 
-Les protections de la 0.5.1 restent actives :
+- 1 canal d'entree
+- 2 canaux de sortie
 
-- autosave toutes les 30 secondes si l'etat a change
-- fichier .autosave.sonoforge
-- fichier .backup.sonoforge avant ecrasement manuel
-- bouton Recuperer
-- refus d'ecraser le projet principal si le backup echoue
+Si aucune entree n'est disponible, l'application retombe sur la configuration de lecture seule.
 
-## Format projet
+La fenetre Audio permet desormais de choisir jusqu'a 2 canaux d'entree et 2 canaux de sortie.
+
+## Architecture temps reel
+
+La lecture et l'enregistrement passent par un callback audio commun :
 
 ```text
-SonoForgeProject
-formatVersion = 1
-appVersion = 0.5.2
+Audio Device
+     |
+     +--> Input --> ThreadedWriter --> WAV
+     |
+     +--> AudioEngine --> Mixer --> Output
 ```
+
+Le thread audio ne realise pas directement les ecritures disque.
+
+## Limitations 0.6
+
+- une seule prise enregistree a la fois
+- pas encore d'armement individuel par piste
+- pas encore de monitoring d'entree configurable
+- pas encore de compteur dB d'entree
+- pas encore de pre-roll
+- pas encore de punch in/out
+- latence a valider sur materiel Windows reel
+- ASIO non encore integre
 
 ## Fonctions conservees
 
+- fermeture securisee
+- projets recents
+- autosave / backup / recovery
+- sauvegarde .sonoforge
+- Undo / Redo
 - transport global
 - clips deplacables
-- Split et Trim non destructifs
-- selection / duplication / suppression
-- Undo / Redo
-- sauvegarde / ouverture .sonoforge
-- autosave et backup
-- detection des medias manquants
-- grille 1/4, 1/8, 1/16
-- BPM et snapping
-- waveforms
-- zoom et navigation
+- Split / Trim
+- grille musicale
+- BPM / snapping
 - volume / pan / Mute / Solo
 - Master
 
 ## Prochaine iteration
 
-La base de session est maintenant assez solide pour commencer l'enregistrement audio :
-
-- entree audio
 - armement d'une piste
-- Record / Stop
-- creation du fichier WAV
-- insertion automatique du nouveau clip dans le projet
+- vumetre d'entree
+- selection mono/stereo
+- monitoring
+- test de latence
+- puis ASIO
 
 ## Compilation Windows
 

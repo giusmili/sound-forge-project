@@ -4,7 +4,8 @@
 
 #include "AudioTrack.h"
 
-class AudioEngine final : public juce::AudioSource
+class AudioEngine final : public juce::AudioSource,
+                          public juce::AudioIODeviceCallback
 {
 public:
     struct TrackState
@@ -25,6 +26,17 @@ public:
     void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override;
     void releaseResources() override;
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferToFill) override;
+
+    void audioDeviceIOCallbackWithContext(
+        const float* const* inputChannelData,
+        int numInputChannels,
+        float* const* outputChannelData,
+        int numOutputChannels,
+        int numSamples,
+        const juce::AudioIODeviceCallbackContext& context
+    ) override;
+    void audioDeviceAboutToStart(juce::AudioIODevice* device) override;
+    void audioDeviceStopped() override;
 
     juce::Result addTrackFromFile(
         const juce::File& file,
@@ -47,6 +59,12 @@ public:
     [[nodiscard]] std::vector<TrackState> captureTrackStates() const;
     juce::Result restoreTrackStates(const std::vector<TrackState>& states);
     [[nodiscard]] std::vector<AudioTrack*> getTrackPointers() const;
+
+    juce::Result startRecording(const juce::File& file);
+    void stopRecording();
+    [[nodiscard]] bool isRecording() const noexcept;
+    [[nodiscard]] double getRecordingStartPosition() const noexcept;
+    [[nodiscard]] bool hasAudioInput() const noexcept;
 
     void play();
     void pause();
@@ -82,8 +100,15 @@ private:
     std::atomic<double> outputSampleRate { 44100.0 };
     std::atomic<bool> playing { false };
 
-    juce::AudioSourcePlayer sourcePlayer;
     juce::AudioDeviceManager deviceManager;
+
+    juce::TimeSliceThread recordingThread { "SonoForge Recorder" };
+    std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> threadedWriter;
+    std::atomic<juce::AudioFormatWriter::ThreadedWriter*> activeWriter { nullptr };
+    std::atomic<bool> recording { false };
+    std::atomic<double> recordingStartPosition { 0.0 };
+    std::atomic<double> inputSampleRate { 0.0 };
+    std::atomic<int> activeInputChannels { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };
