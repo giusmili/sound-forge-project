@@ -46,6 +46,8 @@ void AudioTrack::getNextAudioBlock(
     if (muted.load() || soloMuted.load())
     {
         bufferToFill.clearActiveBufferRegion();
+        peakLeft.store(0.0f);
+        peakRight.store(0.0f);
         return;
     }
 
@@ -79,6 +81,15 @@ void AudioTrack::getNextAudioBlock(
             rightGain
         );
     }
+
+    const auto leftPeak = bufferToFill.buffer->getNumChannels() > 0
+        ? bufferToFill.buffer->getMagnitude(0, bufferToFill.startSample, bufferToFill.numSamples)
+        : 0.0f;
+    const auto rightPeak = bufferToFill.buffer->getNumChannels() > 1
+        ? bufferToFill.buffer->getMagnitude(1, bufferToFill.startSample, bufferToFill.numSamples)
+        : leftPeak;
+    peakLeft.store(juce::jlimit(0.0f, 1.0f, leftPeak));
+    peakRight.store(juce::jlimit(0.0f, 1.0f, rightPeak));
 
     for (int channel = 2;
          channel < bufferToFill.buffer->getNumChannels();
@@ -168,6 +179,16 @@ bool AudioTrack::isSolo() const noexcept
 bool AudioTrack::isPlaying() const
 {
     return transport.isPlaying();
+}
+
+float AudioTrack::getPeakLeft() const noexcept
+{
+    return peakLeft.load();
+}
+
+float AudioTrack::getPeakRight() const noexcept
+{
+    return peakRight.load();
 }
 
 double AudioTrack::getPositionSeconds() const
