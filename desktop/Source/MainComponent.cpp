@@ -8,16 +8,16 @@ constexpr auto backgroundColour = 0xff111318;
 constexpr auto panelColour = 0xff1b1f26;
 constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto textColour = 0xffe8edf3;
-constexpr int trackRowHeight = 94;
+constexpr int trackRowHeight = 112;
 }
 
 MainComponent::MainComponent()
 {
     setOpaque(true);
-    setSize(1050, 700);
+    setSize(1180, 760);
 
     titleLabel.setText(
-        "SonoForge Studio 0.2",
+        "SonoForge Studio 0.2C",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -65,6 +65,7 @@ MainComponent::MainComponent()
     for (auto* button : {
              &openButton,
              &playButton,
+             &pauseButton,
              &stopButton,
              &audioSettingsButton
          })
@@ -81,6 +82,7 @@ MainComponent::MainComponent()
     }
 
     playButton.setEnabled(false);
+    pauseButton.setEnabled(false);
     stopButton.setEnabled(false);
 
     masterSlider.setRange(0.0, 1.0, 0.01);
@@ -100,6 +102,12 @@ MainComponent::MainComponent()
     );
     addAndMakeVisible(masterSlider);
 
+    timelineRuler.onSeek = [this](const double seconds)
+    {
+        seekTo(seconds);
+    };
+    addAndMakeVisible(timelineRuler);
+
     trackViewport.setViewedComponent(&trackList, false);
     trackViewport.setScrollBarsShown(true, false);
     addAndMakeVisible(trackViewport);
@@ -112,13 +120,20 @@ MainComponent::MainComponent()
     playButton.onClick = [this]
     {
         audioEngine.play();
-        stopButton.setEnabled(true);
+        pauseButton.setEnabled(audioEngine.isPlaying());
+    };
+
+    pauseButton.onClick = [this]
+    {
+        audioEngine.pause();
+        pauseButton.setEnabled(false);
     };
 
     stopButton.onClick = [this]
     {
         audioEngine.stop();
-        stopButton.setEnabled(false);
+        updateTimeline(0.0);
+        pauseButton.setEnabled(false);
     };
 
     audioSettingsButton.onClick = [this]
@@ -137,7 +152,7 @@ MainComponent::MainComponent()
         static_cast<float>(masterSlider.getValue())
     );
 
-    startTimerHz(20);
+    startTimerHz(30);
 }
 
 void MainComponent::paint(juce::Graphics& graphics)
@@ -179,28 +194,37 @@ void MainComponent::resized()
         importRow.removeFromLeft(180)
     );
 
-    area.removeFromTop(14);
+    area.removeFromTop(10);
 
-    auto transportRow = area.removeFromTop(58);
+    auto transportRow = area.removeFromTop(54);
     playButton.setBounds(
-        transportRow.removeFromLeft(90).reduced(5)
+        transportRow.removeFromLeft(76).reduced(5)
+    );
+    pauseButton.setBounds(
+        transportRow.removeFromLeft(76).reduced(5)
     );
     stopButton.setBounds(
-        transportRow.removeFromLeft(90).reduced(5)
+        transportRow.removeFromLeft(76).reduced(5)
     );
-    transportRow.removeFromLeft(14);
+    transportRow.removeFromLeft(12);
     timeLabel.setBounds(
-        transportRow.removeFromLeft(280).reduced(5)
+        transportRow.removeFromLeft(260).reduced(5)
     );
-    transportRow.removeFromLeft(18);
+    transportRow.removeFromLeft(12);
     masterLabel.setBounds(
         transportRow.removeFromLeft(58)
     );
     masterSlider.setBounds(
-        transportRow.removeFromLeft(260).reduced(4)
+        transportRow.removeFromLeft(250).reduced(4)
     );
 
-    area.removeFromTop(12);
+    area.removeFromTop(8);
+
+    timelineRuler.setBounds(
+        area.removeFromTop(34)
+    );
+
+    area.removeFromTop(2);
     trackViewport.setBounds(area);
 
     layoutTracks();
@@ -258,9 +282,11 @@ void MainComponent::openAudioFiles()
                 }
             }
 
-            safeThis->playButton.setEnabled(
-                safeThis->audioEngine.getTrackCount() > 0
-            );
+            const auto hasTracks =
+                safeThis->audioEngine.getTrackCount() > 0;
+
+            safeThis->playButton.setEnabled(hasTracks);
+            safeThis->stopButton.setEnabled(hasTracks);
 
             safeThis->projectLabel.setText(
                 juce::String(
@@ -270,6 +296,9 @@ void MainComponent::openAudioFiles()
                 juce::dontSendNotification
             );
 
+            safeThis->updateTimeline(
+                safeThis->audioEngine.getPositionSeconds()
+            );
             safeThis->layoutTracks();
         }
     );
@@ -278,8 +307,22 @@ void MainComponent::openAudioFiles()
 void MainComponent::addTrackRow(AudioTrack& track)
 {
     auto* row = trackRows.add(
-        new TrackRowComponent(track)
+        new TrackRowComponent(
+            track,
+            audioEngine.getFormatManager(),
+            audioEngine.getThumbnailCache()
+        )
     );
+
+    row->onSeek = [this](const double seconds)
+    {
+        seekTo(seconds);
+    };
+
+    row->onSoloChanged = [this]
+    {
+        audioEngine.refreshSoloState();
+    };
 
     trackList.addAndMakeVisible(row);
     layoutTracks();
@@ -288,7 +331,7 @@ void MainComponent::addTrackRow(AudioTrack& track)
 void MainComponent::layoutTracks()
 {
     const auto width =
-        juce::jmax(320, trackViewport.getWidth() - 14);
+        juce::jmax(500, trackViewport.getWidth() - 14);
 
     const auto height =
         juce::jmax(
@@ -311,6 +354,35 @@ void MainComponent::layoutTracks()
 
         y += trackRowHeight;
     }
+}
+
+void MainComponent::updateTimeline(
+    const double position
+)
+{
+    const auto length =
+        audioEngine.getLengthSeconds();
+
+    timelineRuler.setProjectLength(length);
+    timelineRuler.setPosition(position);
+
+    for (auto* row : trackRows)
+        row->setTimelineState(length, position);
+
+    timeLabel.setText(
+        formatTime(position)
+            + " / "
+            + formatTime(length),
+        juce::dontSendNotification
+    );
+}
+
+void MainComponent::seekTo(const double seconds)
+{
+    audioEngine.setPositionSeconds(seconds);
+    updateTimeline(
+        audioEngine.getPositionSeconds()
+    );
 }
 
 void MainComponent::showAudioSettings()
@@ -346,18 +418,9 @@ void MainComponent::timerCallback()
 {
     const auto current =
         audioEngine.getPositionSeconds();
-    const auto length =
-        audioEngine.getLengthSeconds();
 
-    timeLabel.setText(
-        formatTime(current)
-            + " / "
-            + formatTime(length),
-        juce::dontSendNotification
-    );
-
-    if (! audioEngine.isPlaying())
-        stopButton.setEnabled(false);
+    updateTimeline(current);
+    pauseButton.setEnabled(audioEngine.isPlaying());
 }
 
 juce::String MainComponent::formatTime(

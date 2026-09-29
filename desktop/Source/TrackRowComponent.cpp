@@ -1,22 +1,44 @@
 #include "TrackRowComponent.h"
 
+#include <cmath>
+
 namespace
 {
 constexpr auto rowColour = 0xff222831;
+constexpr auto timelineColour = 0xff15191f;
+constexpr auto clipColour = 0xff244d6e;
+constexpr auto waveformColour = 0xff81c7ff;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto muteColour = 0xffd65454;
+constexpr auto soloColour = 0xffd4a62a;
+constexpr auto playheadColour = 0xffffb347;
 }
 
-TrackRowComponent::TrackRowComponent(AudioTrack& trackToControl)
-    : track(trackToControl)
+TrackRowComponent::TrackRowComponent(
+    AudioTrack& trackToControl,
+    juce::AudioFormatManager& formatManager,
+    juce::AudioThumbnailCache& thumbnailCache
+)
+    : track(trackToControl),
+      thumbnail(512, formatManager, thumbnailCache)
 {
-    nameLabel.setText(track.getName(), juce::dontSendNotification);
+    thumbnail.addChangeListener(this);
+    thumbnail.setSource(
+        new juce::FileInputSource(track.getSourceFile())
+    );
+
+    nameLabel.setText(
+        track.getName(),
+        juce::dontSendNotification
+    );
     nameLabel.setColour(
         juce::Label::textColourId,
         juce::Colour(textColour)
     );
-    nameLabel.setFont(juce::FontOptions(16.0f, juce::Font::bold));
+    nameLabel.setFont(
+        juce::FontOptions(16.0f, juce::Font::bold)
+    );
     addAndMakeVisible(nameLabel);
 
     volumeLabel.setText("Vol", juce::dontSendNotification);
@@ -40,13 +62,25 @@ TrackRowComponent::TrackRowComponent(AudioTrack& trackToControl)
     };
     addAndMakeVisible(muteButton);
 
+    soloButton.onClick = [this]
+    {
+        track.setSolo(! track.isSolo());
+        refreshSoloButton();
+
+        if (onSoloChanged)
+            onSoloChanged();
+    };
+    addAndMakeVisible(soloButton);
+
     volumeSlider.setRange(0.0, 1.5, 0.01);
     volumeSlider.setValue(track.getGain());
-    volumeSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    volumeSlider.setSliderStyle(
+        juce::Slider::LinearHorizontal
+    );
     volumeSlider.setTextBoxStyle(
         juce::Slider::TextBoxRight,
         false,
-        54,
+        52,
         22
     );
     volumeSlider.setColour(
@@ -63,11 +97,13 @@ TrackRowComponent::TrackRowComponent(AudioTrack& trackToControl)
 
     panSlider.setRange(-1.0, 1.0, 0.01);
     panSlider.setValue(track.getPan());
-    panSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    panSlider.setSliderStyle(
+        juce::Slider::LinearHorizontal
+    );
     panSlider.setTextBoxStyle(
         juce::Slider::TextBoxRight,
         false,
-        54,
+        52,
         22
     );
     panSlider.onValueChange = [this]
@@ -79,37 +115,179 @@ TrackRowComponent::TrackRowComponent(AudioTrack& trackToControl)
     addAndMakeVisible(panSlider);
 
     refreshMuteButton();
+    refreshSoloButton();
+}
+
+TrackRowComponent::~TrackRowComponent()
+{
+    thumbnail.removeChangeListener(this);
 }
 
 void TrackRowComponent::paint(juce::Graphics& graphics)
 {
+    const auto bounds = getLocalBounds().reduced(2);
+
     graphics.setColour(juce::Colour(rowColour));
     graphics.fillRoundedRectangle(
-        getLocalBounds().reduced(2).toFloat(),
+        bounds.toFloat(),
         6.0f
+    );
+
+    const auto waveformBounds = getWaveformBounds();
+
+    graphics.setColour(juce::Colour(timelineColour));
+    graphics.fillRect(waveformBounds);
+
+    if (projectLength > 0.0)
+    {
+        const auto clipBounds = getClipBounds();
+
+        graphics.setColour(juce::Colour(clipColour));
+        graphics.fillRoundedRectangle(
+            clipBounds.toFloat(),
+            4.0f
+        );
+
+        if (thumbnail.getTotalLength() > 0.0
+            && clipBounds.getWidth() > 1)
+        {
+            graphics.setColour(
+                juce::Colour(waveformColour)
+            );
+
+            thumbnail.drawChannels(
+                graphics,
+                clipBounds.reduced(4, 7),
+                0.0,
+                track.getLengthSeconds(),
+                1.0f
+            );
+        }
+
+        const auto ratio = juce::jlimit(
+            0.0,
+            1.0,
+            playheadPosition / projectLength
+        );
+
+        const auto playheadX =
+            waveformBounds.getX()
+            + static_cast<int>(
+                std::round(
+                    ratio * waveformBounds.getWidth()
+                )
+            );
+
+        graphics.setColour(
+            juce::Colour(playheadColour)
+        );
+        graphics.fillRect(
+            playheadX - 1,
+            waveformBounds.getY(),
+            2,
+            waveformBounds.getHeight()
+        );
+    }
+
+    graphics.setColour(
+        juce::Colour(0xff39424e)
+    );
+    graphics.drawVerticalLine(
+        TimelineRulerComponent::controlsWidth,
+        0.0f,
+        static_cast<float>(getHeight())
     );
 }
 
 void TrackRowComponent::resized()
 {
-    auto area = getLocalBounds().reduced(10);
+    auto controls = getLocalBounds()
+        .withWidth(
+            TimelineRulerComponent::controlsWidth
+        )
+        .reduced(10, 8);
 
-    auto left = area.removeFromLeft(190);
-    nameLabel.setBounds(left.removeFromTop(32));
-    muteButton.setBounds(left.removeFromTop(34).removeFromLeft(54));
+    nameLabel.setBounds(
+        controls.removeFromTop(26)
+    );
 
-    area.removeFromLeft(12);
+    auto buttons = controls.removeFromTop(28);
+    muteButton.setBounds(
+        buttons.removeFromLeft(46)
+    );
+    buttons.removeFromLeft(6);
+    soloButton.setBounds(
+        buttons.removeFromLeft(46)
+    );
 
-    auto controls = area;
-    auto volumeArea = controls.removeFromTop(34);
-    volumeLabel.setBounds(volumeArea.removeFromLeft(40));
+    controls.removeFromTop(2);
+
+    auto volumeArea = controls.removeFromTop(26);
+    volumeLabel.setBounds(
+        volumeArea.removeFromLeft(34)
+    );
     volumeSlider.setBounds(volumeArea);
 
-    controls.removeFromTop(6);
-
-    auto panArea = controls.removeFromTop(34);
-    panLabel.setBounds(panArea.removeFromLeft(40));
+    auto panArea = controls.removeFromTop(26);
+    panLabel.setBounds(
+        panArea.removeFromLeft(34)
+    );
     panSlider.setBounds(panArea);
+}
+
+void TrackRowComponent::mouseDown(
+    const juce::MouseEvent& event
+)
+{
+    const auto waveformBounds = getWaveformBounds();
+
+    if (projectLength <= 0.0
+        || ! waveformBounds.contains(event.getPosition()))
+    {
+        return;
+    }
+
+    const auto relativeX =
+        event.position.x
+        - static_cast<float>(waveformBounds.getX());
+
+    const auto ratio = juce::jlimit(
+        0.0,
+        1.0,
+        static_cast<double>(relativeX)
+            / static_cast<double>(
+                waveformBounds.getWidth()
+            )
+    );
+
+    if (onSeek)
+        onSeek(ratio * projectLength);
+}
+
+void TrackRowComponent::setTimelineState(
+    const double projectLengthSeconds,
+    const double playheadSeconds
+)
+{
+    projectLength = juce::jmax(
+        0.0,
+        projectLengthSeconds
+    );
+
+    playheadPosition = juce::jlimit(
+        0.0,
+        projectLength,
+        playheadSeconds
+    );
+
+    repaint();
+}
+
+void TrackRowComponent::changeListenerCallback(
+    juce::ChangeBroadcaster*
+)
+{
+    repaint();
 }
 
 void TrackRowComponent::refreshMuteButton()
@@ -120,4 +298,50 @@ void TrackRowComponent::refreshMuteButton()
             ? juce::Colour(muteColour)
             : juce::Colour(rowColour).brighter(0.15f)
     );
+}
+
+void TrackRowComponent::refreshSoloButton()
+{
+    soloButton.setColour(
+        juce::TextButton::buttonColourId,
+        track.isSolo()
+            ? juce::Colour(soloColour)
+            : juce::Colour(rowColour).brighter(0.15f)
+    );
+}
+
+juce::Rectangle<int>
+TrackRowComponent::getWaveformBounds() const
+{
+    return getLocalBounds()
+        .withTrimmedLeft(
+            TimelineRulerComponent::controlsWidth
+        )
+        .reduced(5, 8);
+}
+
+juce::Rectangle<int>
+TrackRowComponent::getClipBounds() const
+{
+    auto waveformBounds = getWaveformBounds();
+
+    if (projectLength <= 0.0)
+        return {};
+
+    const auto ratio = juce::jlimit(
+        0.0,
+        1.0,
+        track.getLengthSeconds() / projectLength
+    );
+
+    const auto width = juce::jmax(
+        1,
+        static_cast<int>(
+            std::round(
+                ratio * waveformBounds.getWidth()
+            )
+        )
+    );
+
+    return waveformBounds.withWidth(width);
 }

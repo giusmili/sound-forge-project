@@ -1,37 +1,40 @@
 # SonoForge Studio Desktop
 
-Base native du projet SonoForge Studio.
+SonoForge Studio 0.2C consolide le fonctions de transport et de mixage.
 
-## Etat actuel
-
-La branche de developpement 0.2 ajoute un premier moteur multipiste au socle 0.1 :
+## Fonctionnalites actuelles
 
 - application native C++20 / JUCE 9.0.2
-- sortie audio Windows
-- import de plusieurs fichiers WAV, AIFF, FLAC, OGG et MP3
-- lecture simultanee de plusieurs pistes
-- volume individuel jusqu'a +3.5 dB environ
-- panoramique gauche / droite
-- mute par piste
+- lecture multipiste
+- import de plusieurs fichiers audio
+- volume et panoramique par piste
+- Mute et Solo par piste
 - volume Master
-- transport Play / Stop
-- compteur temporel
+- Play, Pause et Stop
 - configuration du peripherique audio
+- timeline commune
+- regle temporelle
+- playhead synchronise
+- formes d'onde via JUCE AudioThumbnail
+- longueur graphique des clips proportionnelle a leur duree
+- clic dans la regle ou une piste pour deplacer le playhead
 
-La prochaine sous-etape ajoutera la representation graphique des clips et des waveforms.
+## Comportement Solo
+
+Des qu'une piste est en Solo, toutes les pistes non Solo sont silencieuses. Plusieurs pistes peuvent etre mises en Solo simultanement.
+
+## Prochain chantier d'architecture
+
+Le deplacement reel des clips dans le temps demande un transport global avec un offset de debut propre a chaque clip. Cette evolution sera isolee dans une branche dediee afin de ne pas fragiliser le moteur multipiste deja valide.
 
 ## Prerequis Windows
 
 - Windows 11
-- Visual Studio 2022 avec le workload Desktop development with C++
+- Visual Studio 2022 avec Desktop development with C++
 - CMake 3.22 ou plus recent
 - Git
 
-JUCE 9.0.2 est recupere automatiquement par CMake avec FetchContent.
-
 ## Configuration
-
-Depuis la racine du depot :
 
 ```powershell
 cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
@@ -42,23 +45,6 @@ cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
 ```powershell
 cmake --build build --config Release --parallel
 ```
-
-## Architecture en cours
-
-```text
-MainComponent
-    |
-    v
-AudioEngine
-    |
-    +-- MixerAudioSource
-          |
-          +-- AudioTrack 1
-          +-- AudioTrack 2
-          +-- AudioTrack N
-```
-
-Chaque piste possede son propre transport et ses propres reglages. Le moteur melange les pistes avant d'appliquer le gain Master.
 
 ## Licence JUCE
 

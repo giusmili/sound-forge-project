@@ -1,5 +1,7 @@
 #include "AudioEngine.h"
 
+#include <algorithm>
+
 AudioEngine::AudioEngine()
 {
     formatManager.registerBasicFormats();
@@ -76,6 +78,7 @@ juce::Result AudioEngine::addTrackFromFile(
     );
 
     auto track = std::make_unique<AudioTrack>(
+        file,
         file.getFileNameWithoutExtension(),
         std::move(readerSource),
         sourceSampleRate
@@ -85,14 +88,29 @@ juce::Result AudioEngine::addTrackFromFile(
     tracks.push_back(std::move(track));
 
     mixer.addInputSource(createdTrack, false);
+    refreshSoloState();
 
     return juce::Result::ok();
 }
 
 void AudioEngine::play()
 {
+    const auto length = getLengthSeconds();
+
+    if (length <= 0.0)
+        return;
+
+    if (getPositionSeconds() >= length - 0.001)
+        setPositionSeconds(0.0);
+
     for (auto& track : tracks)
         track->play();
+}
+
+void AudioEngine::pause()
+{
+    for (auto& track : tracks)
+        track->pause();
 }
 
 void AudioEngine::stop()
@@ -101,9 +119,36 @@ void AudioEngine::stop()
         track->stop();
 }
 
+void AudioEngine::setPositionSeconds(const double seconds)
+{
+    const auto position = juce::jlimit(
+        0.0,
+        getLengthSeconds(),
+        seconds
+    );
+
+    for (auto& track : tracks)
+        track->setPositionSeconds(position);
+}
+
 void AudioEngine::setMasterGain(const float gain)
 {
     masterGain.store(juce::jlimit(0.0f, 1.0f, gain));
+}
+
+void AudioEngine::refreshSoloState()
+{
+    const auto anySolo = std::any_of(
+        tracks.begin(),
+        tracks.end(),
+        [](const auto& track)
+        {
+            return track->isSolo();
+        }
+    );
+
+    for (auto& track : tracks)
+        track->setSoloMuted(anySolo && ! track->isSolo());
 }
 
 bool AudioEngine::isPlaying() const
@@ -145,4 +190,14 @@ int AudioEngine::getTrackCount() const noexcept
 juce::AudioDeviceManager& AudioEngine::getDeviceManager() noexcept
 {
     return deviceManager;
+}
+
+juce::AudioFormatManager& AudioEngine::getFormatManager() noexcept
+{
+    return formatManager;
+}
+
+juce::AudioThumbnailCache& AudioEngine::getThumbnailCache() noexcept
+{
+    return thumbnailCache;
 }

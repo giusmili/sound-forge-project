@@ -1,11 +1,13 @@
 #include "AudioTrack.h"
 
 AudioTrack::AudioTrack(
+    juce::File sourceFile,
     juce::String trackName,
     std::unique_ptr<juce::AudioFormatReaderSource> source,
     const double sourceSampleRate
 )
-    : name(std::move(trackName)),
+    : file(std::move(sourceFile)),
+      name(std::move(trackName)),
       readerSource(std::move(source))
 {
     transport.setSource(
@@ -41,7 +43,7 @@ void AudioTrack::getNextAudioBlock(
 {
     transport.getNextAudioBlock(bufferToFill);
 
-    if (muted.load())
+    if (muted.load() || soloMuted.load())
     {
         bufferToFill.clearActiveBufferRegion();
         return;
@@ -93,19 +95,29 @@ void AudioTrack::getNextAudioBlock(
 
 void AudioTrack::play()
 {
-    if (getLengthSeconds() <= 0.0)
-        return;
+    if (getLengthSeconds() > 0.0
+        && getPositionSeconds() < getLengthSeconds())
+    {
+        transport.start();
+    }
+}
 
-    if (transport.getCurrentPosition() >= getLengthSeconds())
-        transport.setPosition(0.0);
-
-    transport.start();
+void AudioTrack::pause()
+{
+    transport.stop();
 }
 
 void AudioTrack::stop()
 {
     transport.stop();
     transport.setPosition(0.0);
+}
+
+void AudioTrack::setPositionSeconds(const double seconds)
+{
+    transport.setPosition(
+        juce::jlimit(0.0, getLengthSeconds(), seconds)
+    );
 }
 
 void AudioTrack::setGain(const float newGain)
@@ -123,6 +135,16 @@ void AudioTrack::setMuted(const bool shouldBeMuted)
     muted.store(shouldBeMuted);
 }
 
+void AudioTrack::setSolo(const bool shouldBeSolo)
+{
+    solo.store(shouldBeSolo);
+}
+
+void AudioTrack::setSoloMuted(const bool shouldBeSoloMuted)
+{
+    soloMuted.store(shouldBeSoloMuted);
+}
+
 float AudioTrack::getGain() const noexcept
 {
     return gain.load();
@@ -136,6 +158,11 @@ float AudioTrack::getPan() const noexcept
 bool AudioTrack::isMuted() const noexcept
 {
     return muted.load();
+}
+
+bool AudioTrack::isSolo() const noexcept
+{
+    return solo.load();
 }
 
 bool AudioTrack::isPlaying() const
@@ -156,4 +183,9 @@ double AudioTrack::getLengthSeconds() const
 const juce::String& AudioTrack::getName() const noexcept
 {
     return name;
+}
+
+const juce::File& AudioTrack::getSourceFile() const noexcept
+{
+    return file;
 }
