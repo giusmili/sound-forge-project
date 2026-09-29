@@ -41,6 +41,7 @@ public:
 
     void addTrack(AudioTrack& track);
     void refresh();
+    void setMasterLevels(float left, float right);
     void setMasterGain(float gain);
     [[nodiscard]] float getMasterGain() const;
 
@@ -51,6 +52,10 @@ private:
     juce::Label titleLabel { {}, "MIXER" };
     juce::Label masterLabel { {}, "MASTER" };
     juce::Slider masterSlider;
+    juce::Label masterDbLabel;
+    float masterPeakLeft = 0.0f;
+    float masterPeakRight = 0.0f;
+    int clipHoldFrames = 0;
     juce::Component channelContainer;
     juce::Viewport viewport;
     juce::OwnedArray<MixerChannelComponent> channels;
