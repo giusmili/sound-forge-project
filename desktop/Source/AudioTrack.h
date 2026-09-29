@@ -30,6 +30,7 @@ public:
 
     [[nodiscard]] float getGain() const noexcept;
     [[nodiscard]] float getPan() const noexcept;
+    [[nodiscard]] float getPeakLevel() const noexcept;
     [[nodiscard]] bool isMuted() const noexcept;
     [[nodiscard]] bool isSolo() const noexcept;
     [[nodiscard]] bool isPlaying() const;
@@ -51,6 +52,7 @@ private:
 
     std::atomic<float> gain { 1.0f };
     std::atomic<float> pan { 0.0f };
+    std::atomic<float> peakLevel { 0.0f };
     std::atomic<bool> muted { false };
     std::atomic<bool> solo { false };
     std::atomic<bool> soloMuted { false };
