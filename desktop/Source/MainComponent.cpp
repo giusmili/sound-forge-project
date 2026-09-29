@@ -15,10 +15,10 @@ constexpr int trackRowHeight = 112;
 MainComponent::MainComponent()
 {
     setOpaque(true);
-    setSize(1220, 800);
+    setSize(1260, 820);
 
     titleLabel.setText(
-        "SonoForge Studio 0.3.2",
+        "SonoForge Studio 0.4",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -30,10 +30,6 @@ MainComponent::MainComponent()
     );
     addAndMakeVisible(titleLabel);
 
-    projectLabel.setText(
-        "0 piste",
-        juce::dontSendNotification
-    );
     projectLabel.setColour(
         juce::Label::textColourId,
         juce::Colour(textColour).withAlpha(0.75f)
@@ -56,6 +52,7 @@ MainComponent::MainComponent()
     for (auto* label : {
              &masterLabel,
              &bpmLabel,
+             &gridLabel,
              &zoomLabel,
              &viewLabel
          })
@@ -69,11 +66,14 @@ MainComponent::MainComponent()
 
     masterLabel.setText("Master", juce::dontSendNotification);
     bpmLabel.setText("BPM", juce::dontSendNotification);
+    gridLabel.setText("Grille", juce::dontSendNotification);
     zoomLabel.setText("Zoom", juce::dontSendNotification);
     viewLabel.setText("Vue", juce::dontSendNotification);
 
     for (auto* button : {
              &openButton,
+             &duplicateButton,
+             &deleteButton,
              &playButton,
              &pauseButton,
              &stopButton,
@@ -102,9 +102,14 @@ MainComponent::MainComponent()
         juce::Colour(snapColour)
     );
 
-    playButton.setEnabled(false);
-    pauseButton.setEnabled(false);
-    stopButton.setEnabled(false);
+    gridCombo.addItem("1/4", 1);
+    gridCombo.addItem("1/8", 2);
+    gridCombo.addItem("1/16", 3);
+    gridCombo.setSelectedId(
+        1,
+        juce::dontSendNotification
+    );
+    addAndMakeVisible(gridCombo);
 
     masterSlider.setRange(0.0, 1.0, 0.01);
     masterSlider.setValue(0.8);
@@ -160,7 +165,6 @@ MainComponent::MainComponent()
         0,
         0
     );
-    viewSlider.setEnabled(false);
     addAndMakeVisible(viewSlider);
 
     timelineRuler.onSeek = [this](const double seconds)
@@ -176,6 +180,16 @@ MainComponent::MainComponent()
     openButton.onClick = [this]
     {
         openAudioFiles();
+    };
+
+    duplicateButton.onClick = [this]
+    {
+        duplicateSelectedClip();
+    };
+
+    deleteButton.onClick = [this]
+    {
+        deleteSelectedClip();
     };
 
     playButton.onClick = [this]
@@ -204,7 +218,15 @@ MainComponent::MainComponent()
 
     snapButton.onClick = [this]
     {
-        updateSnapSettings();
+        updateGridSettings();
+    };
+
+    gridCombo.onChange = [this]
+    {
+        updateGridSettings();
+        updateTimeline(
+            audioEngine.getPositionSeconds()
+        );
     };
 
     masterSlider.onValueChange = [this]
@@ -216,7 +238,7 @@ MainComponent::MainComponent()
 
     bpmSlider.onValueChange = [this]
     {
-        updateSnapSettings();
+        updateGridSettings();
         updateTimeline(
             audioEngine.getPositionSeconds()
         );
@@ -241,6 +263,7 @@ MainComponent::MainComponent()
     );
 
     startTimerHz(30);
+    updateProjectState();
 }
 
 void MainComponent::paint(juce::Graphics& graphics)
@@ -264,7 +287,7 @@ void MainComponent::resized()
 
     auto header = area.removeFromTop(52);
     titleLabel.setBounds(
-        header.removeFromLeft(340)
+        header.removeFromLeft(360)
     );
     audioSettingsButton.setBounds(
         header.removeFromRight(100).reduced(4)
@@ -279,7 +302,14 @@ void MainComponent::resized()
     );
     importRow.removeFromLeft(8);
     projectLabel.setBounds(
-        importRow.removeFromLeft(180)
+        importRow.removeFromLeft(120)
+    );
+    importRow.removeFromLeft(10);
+    duplicateButton.setBounds(
+        importRow.removeFromLeft(110).reduced(4)
+    );
+    deleteButton.setBounds(
+        importRow.removeFromLeft(105).reduced(4)
     );
 
     area.removeFromTop(10);
@@ -316,11 +346,20 @@ void MainComponent::resized()
 
     viewRow.removeFromLeft(8);
 
+    gridLabel.setBounds(
+        viewRow.removeFromLeft(42)
+    );
+    gridCombo.setBounds(
+        viewRow.removeFromLeft(72).reduced(3)
+    );
+
+    viewRow.removeFromLeft(8);
+
     bpmLabel.setBounds(
         viewRow.removeFromLeft(38)
     );
     bpmSlider.setBounds(
-        viewRow.removeFromLeft(140).reduced(3)
+        viewRow.removeFromLeft(130).reduced(3)
     );
 
     viewRow.removeFromLeft(10);
@@ -329,7 +368,7 @@ void MainComponent::resized()
         viewRow.removeFromLeft(46)
     );
     zoomSlider.setBounds(
-        viewRow.removeFromLeft(170).reduced(3)
+        viewRow.removeFromLeft(150).reduced(3)
     );
 
     viewRow.removeFromLeft(10);
@@ -338,7 +377,7 @@ void MainComponent::resized()
         viewRow.removeFromLeft(38)
     );
     viewSlider.setBounds(
-        viewRow.removeFromLeft(260).reduced(3)
+        viewRow.removeFromLeft(240).reduced(3)
     );
 
     area.removeFromTop(6);
@@ -375,6 +414,8 @@ void MainComponent::openAudioFiles()
 
             const auto files = chooser.getResults();
 
+            TrackRowComponent* lastAdded = nullptr;
+
             for (const auto& file : files)
             {
                 if (! file.existsAsFile())
@@ -391,7 +432,8 @@ void MainComponent::openAudioFiles()
                 if (result.wasOk()
                     && createdTrack != nullptr)
                 {
-                    safeThis->addTrackRow(*createdTrack);
+                    lastAdded =
+                        safeThis->addTrackRow(*createdTrack);
                 }
                 else
                 {
@@ -405,29 +447,17 @@ void MainComponent::openAudioFiles()
                 }
             }
 
-            const auto hasTracks =
-                safeThis->audioEngine.getTrackCount() > 0;
+            if (lastAdded != nullptr)
+                safeThis->selectRow(lastAdded);
 
-            safeThis->playButton.setEnabled(hasTracks);
-            safeThis->stopButton.setEnabled(hasTracks);
-
-            safeThis->projectLabel.setText(
-                juce::String(
-                    safeThis->audioEngine.getTrackCount()
-                )
-                    + " piste(s)",
-                juce::dontSendNotification
-            );
-
-            safeThis->updateTimeline(
-                safeThis->audioEngine.getPositionSeconds()
-            );
-            safeThis->layoutTracks();
+            safeThis->updateProjectState();
         }
     );
 }
 
-void MainComponent::addTrackRow(AudioTrack& track)
+TrackRowComponent* MainComponent::addTrackRow(
+    AudioTrack& track
+)
 {
     auto* row = trackRows.add(
         new TrackRowComponent(
@@ -452,13 +482,21 @@ void MainComponent::addTrackRow(AudioTrack& track)
         clipMoved();
     };
 
+    row->onSelectionRequested =
+        [this](TrackRowComponent* requestedRow)
+        {
+            selectRow(requestedRow);
+        };
+
     row->setSnapSettings(
         snapButton.getToggleState(),
-        getBeatIntervalSeconds()
+        getGridIntervalSeconds()
     );
 
     trackList.addAndMakeVisible(row);
     layoutTracks();
+
+    return row;
 }
 
 void MainComponent::layoutTracks()
@@ -512,7 +550,7 @@ void MainComponent::updateTimeline(
         viewStart,
         viewDuration,
         position,
-        getBeatIntervalSeconds()
+        getGridIntervalSeconds()
     );
 
     for (auto* row : trackRows)
@@ -530,6 +568,36 @@ void MainComponent::updateTimeline(
             + " / "
             + formatTime(length),
         juce::dontSendNotification
+    );
+}
+
+void MainComponent::updateProjectState()
+{
+    const auto trackCount =
+        audioEngine.getTrackCount();
+
+    const auto hasTracks = trackCount > 0;
+    const auto hasSelection = selectedRow != nullptr;
+
+    projectLabel.setText(
+        juce::String(trackCount) + " piste(s)",
+        juce::dontSendNotification
+    );
+
+    playButton.setEnabled(hasTracks);
+    stopButton.setEnabled(hasTracks);
+    duplicateButton.setEnabled(hasSelection);
+    deleteButton.setEnabled(hasSelection);
+
+    if (! hasTracks)
+    {
+        selectedRow = nullptr;
+        pauseButton.setEnabled(false);
+    }
+
+    layoutTracks();
+    updateTimeline(
+        audioEngine.getPositionSeconds()
     );
 }
 
@@ -551,10 +619,94 @@ void MainComponent::clipMoved()
     );
 }
 
-void MainComponent::updateSnapSettings()
+void MainComponent::selectRow(
+    TrackRowComponent* row
+)
+{
+    selectedRow = row;
+
+    for (auto* candidate : trackRows)
+    {
+        candidate->setSelected(
+            candidate == selectedRow
+        );
+    }
+
+    duplicateButton.setEnabled(selectedRow != nullptr);
+    deleteButton.setEnabled(selectedRow != nullptr);
+}
+
+void MainComponent::duplicateSelectedClip()
+{
+    if (selectedRow == nullptr)
+        return;
+
+    AudioTrack* createdTrack = nullptr;
+
+    const auto result = audioEngine.duplicateTrack(
+        selectedRow->getTrack(),
+        createdTrack
+    );
+
+    if (result.failed() || createdTrack == nullptr)
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Duplication impossible",
+            result.getErrorMessage()
+        );
+        return;
+    }
+
+    createdTrack->setStartOffsetSeconds(
+        selectedRow->getTrack().getStartOffsetSeconds()
+            + getGridIntervalSeconds()
+    );
+
+    audioEngine.refreshTrackAlignment();
+
+    auto* newRow = addTrackRow(*createdTrack);
+    selectRow(newRow);
+
+    updateProjectState();
+}
+
+void MainComponent::deleteSelectedClip()
+{
+    if (selectedRow == nullptr)
+        return;
+
+    auto* rowToDelete = selectedRow;
+    auto* trackToDelete = &selectedRow->getTrack();
+
+    auto safeThis =
+        juce::Component::SafePointer<MainComponent>(this);
+
+    juce::MessageManager::callAsync(
+        [safeThis, rowToDelete, trackToDelete]
+        {
+            if (safeThis == nullptr)
+                return;
+
+            safeThis->selectedRow = nullptr;
+            safeThis->trackRows.removeObject(
+                rowToDelete,
+                true
+            );
+
+            safeThis->audioEngine.removeTrack(
+                trackToDelete
+            );
+
+            safeThis->updateProjectState();
+        }
+    );
+}
+
+void MainComponent::updateGridSettings()
 {
     const auto interval =
-        getBeatIntervalSeconds();
+        getGridIntervalSeconds();
 
     for (auto* row : trackRows)
     {
@@ -597,14 +749,27 @@ double MainComponent::getViewStart(
     return viewSlider.getValue() * maxStart;
 }
 
-double MainComponent::getBeatIntervalSeconds() const
+double MainComponent::getGridIntervalSeconds() const
 {
     const auto bpm = juce::jmax(
         1.0,
         bpmSlider.getValue()
     );
 
-    return 60.0 / bpm;
+    const auto beat = 60.0 / bpm;
+
+    switch (gridCombo.getSelectedId())
+    {
+        case 2:
+            return beat * 0.5;
+
+        case 3:
+            return beat * 0.25;
+
+        case 1:
+        default:
+            return beat;
+    }
 }
 
 void MainComponent::showAudioSettings()

@@ -8,7 +8,9 @@ constexpr auto rowColour = 0xff222831;
 constexpr auto timelineColour = 0xff15191f;
 constexpr auto gridColour = 0xff252c34;
 constexpr auto clipColour = 0xff244d6e;
-constexpr auto clipDragColour = 0xff2f6f9d;
+constexpr auto clipSelectedColour = 0xff336f9e;
+constexpr auto clipDragColour = 0xff3b7fae;
+constexpr auto selectionBorderColour = 0xffffc857;
 constexpr auto waveformColour = 0xff81c7ff;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto accentColour = 0xff5aa9ff;
@@ -158,12 +160,12 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
 
             graphics.setColour(juce::Colour(gridColour));
 
-            for (double beat = firstGrid;
-                 beat <= viewEnd + 0.001;
-                 beat += snapInterval)
+            for (double gridPosition = firstGrid;
+                 gridPosition <= viewEnd + 0.001;
+                 gridPosition += snapInterval)
             {
                 const auto ratio =
-                    (beat - viewStart) / viewDuration;
+                    (gridPosition - viewStart) / viewDuration;
 
                 const auto x =
                     waveformBounds.getX()
@@ -188,13 +190,28 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
             juce::Colour(
                 draggingClip
                     ? clipDragColour
-                    : clipColour
+                    : selected
+                        ? clipSelectedColour
+                        : clipColour
             )
         );
+
         graphics.fillRoundedRectangle(
             clipBounds.toFloat(),
             4.0f
         );
+
+        if (selected)
+        {
+            graphics.setColour(
+                juce::Colour(selectionBorderColour)
+            );
+            graphics.drawRoundedRectangle(
+                clipBounds.toFloat().reduced(1.0f),
+                4.0f,
+                2.0f
+            );
+        }
 
         if (thumbnail.getTotalLength() > 0.0
             && clipBounds.getWidth() > 1)
@@ -206,23 +223,29 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
             thumbnail.drawChannels(
                 graphics,
                 clipBounds.reduced(4, 7),
-                0.0,
-                track.getLengthSeconds(),
+                track.getSourceStartSeconds(),
+                track.getSourceEndSeconds(),
                 1.0f
             );
         }
 
-        if (clipBounds.getWidth() > 70)
+        if (clipBounds.getWidth() > 82)
         {
             graphics.setColour(
-                juce::Colour(textColour).withAlpha(0.8f)
+                juce::Colour(textColour).withAlpha(0.85f)
             );
             graphics.setFont(10.0f);
             graphics.drawText(
                 juce::String(
                     track.getStartOffsetSeconds(),
                     2
-                ) + " s",
+                )
+                    + " s  |  "
+                    + juce::String(
+                        track.getClipDurationSeconds(),
+                        2
+                    )
+                    + " s",
                 clipBounds.reduced(6, 3).removeFromTop(14),
                 juce::Justification::centredLeft
             );
@@ -315,6 +338,9 @@ void TrackRowComponent::mouseDown(
         && viewDuration > 0.0
         && clipBounds.contains(event.getPosition()))
     {
+        if (onSelectionRequested)
+            onSelectionRequested(this);
+
         draggingClip = true;
         dragStartX = event.position.x;
         dragStartOffset = track.getStartOffsetSeconds();
@@ -462,6 +488,24 @@ void TrackRowComponent::setSnapSettings(
     );
 
     repaint();
+}
+
+void TrackRowComponent::setSelected(
+    const bool shouldBeSelected
+)
+{
+    selected = shouldBeSelected;
+    repaint();
+}
+
+bool TrackRowComponent::isSelected() const noexcept
+{
+    return selected;
+}
+
+AudioTrack& TrackRowComponent::getTrack() noexcept
+{
+    return track;
 }
 
 void TrackRowComponent::changeListenerCallback(

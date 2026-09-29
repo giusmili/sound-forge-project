@@ -18,18 +18,22 @@ public:
 
 private:
     void openAudioFiles();
-    void addTrackRow(AudioTrack& track);
+    TrackRowComponent* addTrackRow(AudioTrack& track);
     void layoutTracks();
     void updateTimeline(double position);
+    void updateProjectState();
     void seekTo(double seconds);
     void clipMoved();
-    void updateSnapSettings();
+    void selectRow(TrackRowComponent* row);
+    void duplicateSelectedClip();
+    void deleteSelectedClip();
+    void updateGridSettings();
     void showAudioSettings();
     void timerCallback() override;
 
     [[nodiscard]] double getViewDuration(double projectLength) const;
     [[nodiscard]] double getViewStart(double projectLength, double viewDuration) const;
-    [[nodiscard]] double getBeatIntervalSeconds() const;
+    [[nodiscard]] double getGridIntervalSeconds() const;
 
     static juce::String formatTime(double seconds);
 
@@ -40,15 +44,20 @@ private:
     juce::Label timeLabel;
     juce::Label masterLabel;
     juce::Label bpmLabel;
+    juce::Label gridLabel;
     juce::Label zoomLabel;
     juce::Label viewLabel;
 
     juce::TextButton openButton { "Importer pistes" };
+    juce::TextButton duplicateButton { "Dupliquer" };
+    juce::TextButton deleteButton { "Supprimer" };
     juce::TextButton playButton { "Play" };
     juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
     juce::TextButton audioSettingsButton { "Audio" };
-    juce::TextButton snapButton { "Snap Beat" };
+    juce::TextButton snapButton { "Snap Grid" };
+
+    juce::ComboBox gridCombo;
 
     juce::Slider masterSlider;
     juce::Slider bpmSlider;
@@ -59,6 +68,7 @@ private:
     juce::Component trackList;
     juce::Viewport trackViewport;
     juce::OwnedArray<TrackRowComponent> trackRows;
+    TrackRowComponent* selectedRow = nullptr;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 

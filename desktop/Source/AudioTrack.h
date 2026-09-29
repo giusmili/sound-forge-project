@@ -26,6 +26,7 @@ public:
     void setSolo(bool shouldBeSolo);
     void setSoloMuted(bool shouldBeSoloMuted);
     void setStartOffsetSeconds(double seconds);
+    void setSourceRange(double startSeconds, double endSeconds);
 
     [[nodiscard]] float getGain() const noexcept;
     [[nodiscard]] float getPan() const noexcept;
@@ -35,6 +36,9 @@ public:
     [[nodiscard]] double getPositionSeconds() const;
     [[nodiscard]] double getLengthSeconds() const;
     [[nodiscard]] double getStartOffsetSeconds() const noexcept;
+    [[nodiscard]] double getSourceStartSeconds() const noexcept;
+    [[nodiscard]] double getSourceEndSeconds() const noexcept;
+    [[nodiscard]] double getClipDurationSeconds() const noexcept;
     [[nodiscard]] double getProjectEndSeconds() const noexcept;
     [[nodiscard]] const juce::String& getName() const noexcept;
     [[nodiscard]] const juce::File& getSourceFile() const noexcept;
@@ -51,6 +55,8 @@ private:
     std::atomic<bool> solo { false };
     std::atomic<bool> soloMuted { false };
     std::atomic<double> startOffsetSeconds { 0.0 };
+    std::atomic<double> sourceStartSeconds { 0.0 };
+    std::atomic<double> sourceEndSeconds { 0.0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioTrack)
 };

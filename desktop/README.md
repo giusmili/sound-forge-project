@@ -1,66 +1,88 @@
-# SonoForge Studio Desktop 0.3.2
+# SonoForge Studio Desktop 0.4
 
-Cette iteration transforme le snapping temporel en premiere grille musicale.
+La version 0.4 introduit les premieres operations d'edition de clips.
 
 ## Nouveautes
 
-- BPM reglable de 40 a 240
-- grille visuelle basee sur les temps
-- snapping des clips sur les temps
-- recalcul immediat de la grille lors du changement de BPM
-- grille coherente avec le zoom horizontal
-- Snap Beat activable/desactivable
+- selection visuelle d'un clip
+- commandes Dupliquer et Supprimer
+- grille musicale 1/4, 1/8 et 1/16
+- snapping adapte a la subdivision choisie
+- duplication avec conservation du fichier source, du gain, du pan, du Mute, du Solo et de la plage source
+- decalage automatique du duplicata d'une cellule de grille
+- suppression propre de la piste et de sa source dans le mixer
+- preparation du decoupage non destructif
 
-A 120 BPM, un temps correspond a 0,5 seconde :
+## Modele non destructif
 
-```text
-60 / 120 = 0.5 s
-```
+Le fichier audio original n'est jamais modifie.
 
-A 90 BPM :
-
-```text
-60 / 90 = 0.666... s
-```
-
-## Edition
-
-Le drag d'un clip utilise maintenant :
+Chaque clip possede maintenant :
 
 ```text
-position brute
-    |
-    v
-intervalle = 60 / BPM
-    |
-    v
-position quantifiee sur le temps
+sourceFile
+sourceStart
+sourceEnd
+startOffset
+gain
+pan
+mute
+solo
 ```
 
-La grille reste visible meme lorsque le snapping est desactive, afin de conserver un repere musical.
+La duree visible et lue du clip est :
+
+```text
+clipDuration = sourceEnd - sourceStart
+```
+
+La position de fin dans le projet est :
+
+```text
+projectEnd = startOffset + clipDuration
+```
+
+Cette structure permet d'ajouter ensuite Split, Trim et redimensionnement sans reecrire les fichiers audio.
+
+## Grille musicale
+
+Pour un BPM donne :
+
+```text
+1/4  = 60 / BPM
+1/8  = (60 / BPM) / 2
+1/16 = (60 / BPM) / 4
+```
+
+Exemple a 120 BPM :
+
+```text
+1/4  = 0.500 s
+1/8  = 0.250 s
+1/16 = 0.125 s
+```
 
 ## Fonctions conservees
 
 - transport global
-- offsets reels des clips
+- clips deplacables
 - Play / Pause / Stop
 - seek
 - waveforms
 - zoom 1x a 8x
 - navigation temporelle
+- BPM 40 a 240
 - volume / pan / Mute / Solo
 - Master
 - configuration audio
 
-## Etapes suivantes
+## Prochaine iteration
 
-- subdivisions 1/4, 1/8, 1/16
-- mesures en 4/4
-- selection des clips
-- duplication
-- decoupage non destructif
-- sauvegarde de projet
+- Split au playhead
+- trim gauche / droite
+- selection multiple
 - undo / redo
+- sauvegarde de projet
 - enregistrement audio
 
 ## Compilation Windows
