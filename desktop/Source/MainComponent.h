@@ -6,6 +6,7 @@
 #include "TimelineRulerComponent.h"
 #include "TrackRowComponent.h"
 #include "MidiTrackRowComponent.h"
+#include "MixerPanelComponent.h"
 
 class MainComponent final : public juce::Component,
                             public juce::MenuBarModel,
@@ -164,6 +165,7 @@ private:
     juce::TextButton stopButton { "Stop" };
     juce::TextButton recordButton { "Record" };
     juce::TextButton audioSettingsButton { "Audio" };
+    juce::TextButton mixerButton { "Mixer" };
     juce::TextButton snapButton { "Snap Grid" };
 
     juce::ComboBox gridCombo;
@@ -174,6 +176,8 @@ private:
     juce::Slider viewSlider;
 
     TimelineRulerComponent timelineRuler;
+    MixerPanelComponent mixerPanel { audioEngine };
+    bool mixerVisible = false;
     juce::Component trackList;
     juce::Viewport trackViewport;
     juce::OwnedArray<TrackRowComponent> trackRows;
