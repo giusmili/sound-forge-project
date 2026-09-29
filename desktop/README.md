@@ -1,49 +1,92 @@
-# SonoForge Studio Desktop 0.4.3
+# SonoForge Studio Desktop 0.5
 
-Cette iteration ajoute un historique Undo / Redo base sur des snapshots de projet.
+Cette iteration transforme le snapshot interne en vrai fichier projet persistant.
 
-## Undo / Redo
+## Fichier .sonoforge
 
-Les boutons Annuler et Retablir permettent de revenir sur les principales operations d'edition :
+Un projet SonoForge est un fichier JSON versionne et lisible.
 
-- import audio
-- deplacement d'un clip
-- trim gauche / droite
-- duplication
-- suppression
-- Split au playhead
-
-L'historique conserve jusqu'a 50 etats.
-
-## Snapshot de projet
-
-Chaque entree memorise :
+Il conserve :
 
 ```text
+format
+formatVersion
+appVersion
+
+position du playhead
+BPM
+master
+zoom
+vue
+grille
+snap
+
 tracks[]
-    sourceFile
+    absolutePath
+    relativePath
+    startOffset
     sourceStart
     sourceEnd
-    startOffset
     gain
     pan
     mute
     solo
-
-position du playhead
-BPM
-grille
-snap
-zoom
-vue
-master
 ```
 
-Le moteur peut reconstruire les pistes depuis ce snapshot. Cette architecture servira directement a la prochaine etape : sauvegarder et rouvrir un projet SonoForge.
+## Enregistrer
 
-## Edition continue
+Le bouton Enregistrer cree un fichier `.sonoforge`.
 
-Lors d'un deplacement ou d'un trim, SonoForge n'ajoute pas une entree d'historique pour chaque pixel. Un seul snapshot est cree au debut du geste.
+Apres la premiere sauvegarde, les sauvegardes suivantes reutilisent le meme fichier projet.
+
+## Ouvrir
+
+Le bouton Ouvrir projet restaure :
+
+- toutes les pistes
+- les plages audio non destructives
+- les positions des clips
+- gain et pan
+- Mute et Solo
+- BPM
+- grille et snapping
+- zoom et position de vue
+- Master
+- position du playhead
+
+L'historique Undo / Redo est reinitialise apres ouverture d'un projet.
+
+## Medias audio
+
+Chaque piste enregistre deux chemins :
+
+- chemin absolu
+- chemin relatif au dossier du projet
+
+Au chargement, SonoForge essaie d'abord le chemin absolu puis le chemin relatif.
+
+Cela permet de deplacer un dossier de projet avec ses fichiers audio tout en conservant les liens.
+
+## Fichiers manquants
+
+Avant toute restauration, SonoForge verifie que tous les fichiers audio sont disponibles.
+
+Si un ou plusieurs medias sont absents :
+
+- la liste des fichiers manquants est affichee
+- le projet actuel reste intact
+- aucun chargement partiel n'est effectue
+
+## Format
+
+Version actuelle du format :
+
+```text
+SonoForgeProject
+formatVersion = 1
+```
+
+Le numero de format est distinct de la version de l'application afin de permettre de futures migrations.
 
 ## Fonctions conservees
 
@@ -52,9 +95,9 @@ Lors d'un deplacement ou d'un trim, SonoForge n'ajoute pas une entree d'historiq
 - selection / duplication / suppression
 - Split au playhead
 - trim non destructif
+- Undo / Redo
 - grille 1/4, 1/8, 1/16
 - BPM et snapping
-- Play / Pause / Stop
 - waveforms
 - zoom et navigation
 - volume / pan / Mute / Solo
@@ -62,10 +105,8 @@ Lors d'un deplacement ou d'un trim, SonoForge n'ajoute pas une entree d'historiq
 
 ## Prochaine iteration
 
-- sauvegarde d'un projet .sonoforge
-- ouverture d'un projet
-- detection des fichiers audio manquants
 - autosave
+- projet recent / sauvegarde de secours
 - puis enregistrement audio
 
 ## Compilation Windows

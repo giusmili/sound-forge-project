@@ -30,6 +30,22 @@ private:
     };
 
     void openAudioFiles();
+    void openProject();
+    void saveProject();
+    bool writeProjectFile(const juce::File& file);
+    bool loadProjectFile(const juce::File& file);
+    [[nodiscard]] juce::var serialiseSnapshot(
+        const ProjectSnapshot& snapshot,
+        const juce::File& projectFile
+    ) const;
+    juce::Result deserialiseSnapshot(
+        const juce::var& data,
+        const juce::File& projectFile,
+        ProjectSnapshot& snapshot,
+        juce::StringArray& missingFiles
+    ) const;
+    void updateProjectTitle();
+
     TrackRowComponent* addTrackRow(AudioTrack& track);
     void rebuildTrackRowsFromEngine();
     void layoutTracks();
@@ -71,6 +87,8 @@ private:
     juce::Label zoomLabel;
     juce::Label viewLabel;
 
+    juce::TextButton openProjectButton { "Ouvrir projet" };
+    juce::TextButton saveProjectButton { "Enregistrer" };
     juce::TextButton openButton { "Importer pistes" };
     juce::TextButton undoButton { "Annuler" };
     juce::TextButton redoButton { "Retablir" };
@@ -100,6 +118,8 @@ private:
     std::vector<ProjectSnapshot> redoStack;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
+    std::unique_ptr<juce::FileChooser> projectFileChooser;
+    juce::File currentProjectFile;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

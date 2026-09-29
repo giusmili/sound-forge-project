@@ -20,7 +20,7 @@ MainComponent::MainComponent()
     setSize(1320, 820);
 
     titleLabel.setText(
-        "SonoForge Studio 0.4.3",
+        "SonoForge Studio 0.5",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -73,6 +73,8 @@ MainComponent::MainComponent()
     viewLabel.setText("Vue", juce::dontSendNotification);
 
     for (auto* button : {
+             &openProjectButton,
+             &saveProjectButton,
              &openButton,
              &undoButton,
              &redoButton,
@@ -182,6 +184,16 @@ MainComponent::MainComponent()
     trackViewport.setScrollBarsShown(true, false);
     addAndMakeVisible(trackViewport);
 
+    openProjectButton.onClick = [this]
+    {
+        openProject();
+    };
+
+    saveProjectButton.onClick = [this]
+    {
+        saveProject();
+    };
+
     openButton.onClick = [this]
     {
         openAudioFiles();
@@ -283,6 +295,7 @@ MainComponent::MainComponent()
     );
 
     startTimerHz(30);
+    updateProjectTitle();
     updateProjectState();
 }
 
@@ -317,12 +330,18 @@ void MainComponent::resized()
     area.reduce(18, 18);
 
     auto importRow = area.removeFromTop(44);
+    openProjectButton.setBounds(
+        importRow.removeFromLeft(120).reduced(4)
+    );
+    saveProjectButton.setBounds(
+        importRow.removeFromLeft(112).reduced(4)
+    );
     openButton.setBounds(
-        importRow.removeFromLeft(160).reduced(4)
+        importRow.removeFromLeft(145).reduced(4)
     );
     importRow.removeFromLeft(8);
     projectLabel.setBounds(
-        importRow.removeFromLeft(120)
+        importRow.removeFromLeft(110)
     );
     importRow.removeFromLeft(8);
     undoButton.setBounds(
@@ -490,6 +509,449 @@ void MainComponent::openAudioFiles()
 
             safeThis->updateProjectState();
         }
+    );
+}
+
+void MainComponent::openProject()
+{
+    projectFileChooser = std::make_unique<juce::FileChooser>(
+        "Ouvrir un projet SonoForge",
+        juce::File {},
+        "*.sonoforge"
+    );
+
+    auto safeThis =
+        juce::Component::SafePointer<MainComponent>(this);
+
+    projectFileChooser->launchAsync(
+        juce::FileBrowserComponent::openMode
+            | juce::FileBrowserComponent::canSelectFiles,
+        [safeThis](const juce::FileChooser& chooser)
+        {
+            if (safeThis == nullptr)
+                return;
+
+            const auto file = chooser.getResult();
+
+            if (! file.existsAsFile())
+                return;
+
+            safeThis->loadProjectFile(file);
+        }
+    );
+}
+
+void MainComponent::saveProject()
+{
+    if (currentProjectFile.getFullPathName().isNotEmpty())
+    {
+        writeProjectFile(currentProjectFile);
+        return;
+    }
+
+    projectFileChooser = std::make_unique<juce::FileChooser>(
+        "Enregistrer le projet SonoForge",
+        juce::File::getSpecialLocation(
+            juce::File::userDocumentsDirectory
+        ).getChildFile("projet.sonoforge"),
+        "*.sonoforge"
+    );
+
+    auto safeThis =
+        juce::Component::SafePointer<MainComponent>(this);
+
+    projectFileChooser->launchAsync(
+        juce::FileBrowserComponent::saveMode
+            | juce::FileBrowserComponent::canSelectFiles
+            | juce::FileBrowserComponent::warnAboutOverwriting,
+        [safeThis](const juce::FileChooser& chooser)
+        {
+            if (safeThis == nullptr)
+                return;
+
+            auto file = chooser.getResult();
+
+            if (file.getFullPathName().isEmpty())
+                return;
+
+            if (! file.hasFileExtension(".sonoforge"))
+                file = file.withFileExtension(".sonoforge");
+
+            safeThis->writeProjectFile(file);
+        }
+    );
+}
+
+bool MainComponent::writeProjectFile(
+    const juce::File& file
+)
+{
+    const auto data =
+        serialiseSnapshot(captureSnapshot(), file);
+
+    const auto json =
+        juce::JSON::toString(data, false);
+
+    if (! file.replaceWithText(json))
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Enregistrement impossible",
+            "SonoForge n'a pas pu ecrire le fichier projet."
+        );
+        return false;
+    }
+
+    currentProjectFile = file;
+    updateProjectTitle();
+
+    return true;
+}
+
+bool MainComponent::loadProjectFile(
+    const juce::File& file
+)
+{
+    juce::var data;
+
+    const auto parseResult = juce::JSON::parse(
+        file.loadFileAsString(),
+        data
+    );
+
+    if (parseResult.failed())
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Projet illisible",
+            parseResult.getErrorMessage()
+        );
+        return false;
+    }
+
+    ProjectSnapshot snapshot;
+    juce::StringArray missingFiles;
+
+    const auto result = deserialiseSnapshot(
+        data,
+        file,
+        snapshot,
+        missingFiles
+    );
+
+    if (result.failed())
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Projet invalide",
+            result.getErrorMessage()
+        );
+        return false;
+    }
+
+    if (! missingFiles.isEmpty())
+    {
+        juce::String message =
+            "Les fichiers audio suivants sont introuvables :\n\n";
+
+        const auto visibleCount =
+            juce::jmin(10, missingFiles.size());
+
+        for (int index = 0; index < visibleCount; ++index)
+            message += missingFiles[index] + "\n";
+
+        if (missingFiles.size() > visibleCount)
+        {
+            message += "\n... et "
+                + juce::String(
+                    missingFiles.size() - visibleCount
+                )
+                + " autre(s).";
+        }
+
+        message +=
+            "\nLe projet n'a pas ete charge afin d'eviter une restauration incomplete.";
+
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Medias manquants",
+            message
+        );
+        return false;
+    }
+
+    if (! restoreSnapshot(snapshot))
+        return false;
+
+    undoStack.clear();
+    redoStack.clear();
+
+    currentProjectFile = file;
+    updateProjectTitle();
+    updateHistoryButtons();
+
+    return true;
+}
+
+juce::var MainComponent::serialiseSnapshot(
+    const ProjectSnapshot& snapshot,
+    const juce::File& projectFile
+) const
+{
+    auto* root = new juce::DynamicObject();
+
+    root->setProperty("format", "SonoForgeProject");
+    root->setProperty("formatVersion", 1);
+    root->setProperty("appVersion", "0.5.0");
+    root->setProperty(
+        "positionSeconds",
+        snapshot.positionSeconds
+    );
+    root->setProperty("bpm", snapshot.bpm);
+    root->setProperty(
+        "masterGain",
+        snapshot.masterGain
+    );
+    root->setProperty("zoom", snapshot.zoom);
+    root->setProperty("view", snapshot.view);
+    root->setProperty("gridId", snapshot.gridId);
+    root->setProperty(
+        "snapEnabled",
+        snapshot.snapEnabled
+    );
+
+    juce::Array<juce::var> tracks;
+
+    for (const auto& state : snapshot.tracks)
+    {
+        auto* track = new juce::DynamicObject();
+
+        track->setProperty(
+            "absolutePath",
+            state.sourceFile.getFullPathName()
+        );
+
+        track->setProperty(
+            "relativePath",
+            state.sourceFile.getRelativePathFrom(
+                projectFile.getParentDirectory()
+            )
+        );
+
+        track->setProperty(
+            "startOffsetSeconds",
+            state.startOffsetSeconds
+        );
+        track->setProperty(
+            "sourceStartSeconds",
+            state.sourceStartSeconds
+        );
+        track->setProperty(
+            "sourceEndSeconds",
+            state.sourceEndSeconds
+        );
+        track->setProperty("gain", state.gain);
+        track->setProperty("pan", state.pan);
+        track->setProperty("muted", state.muted);
+        track->setProperty("solo", state.solo);
+
+        tracks.add(juce::var(track));
+    }
+
+    root->setProperty(
+        "tracks",
+        juce::var(tracks)
+    );
+
+    return juce::var(root);
+}
+
+juce::Result MainComponent::deserialiseSnapshot(
+    const juce::var& data,
+    const juce::File& projectFile,
+    ProjectSnapshot& snapshot,
+    juce::StringArray& missingFiles
+) const
+{
+    const auto* root = data.getDynamicObject();
+
+    if (root == nullptr)
+    {
+        return juce::Result::fail(
+            "Le fichier ne contient pas un objet projet valide."
+        );
+    }
+
+    if (root->getProperty("format").toString()
+        != "SonoForgeProject")
+    {
+        return juce::Result::fail(
+            "Ce fichier n'est pas un projet SonoForge."
+        );
+    }
+
+    const auto formatVersion =
+        static_cast<int>(
+            root->getProperty("formatVersion")
+        );
+
+    if (formatVersion != 1)
+    {
+        return juce::Result::fail(
+            "Version de projet non prise en charge : "
+            + juce::String(formatVersion)
+        );
+    }
+
+    snapshot.positionSeconds =
+        static_cast<double>(
+            root->getProperty("positionSeconds")
+        );
+    snapshot.bpm =
+        static_cast<double>(
+            root->getProperty("bpm")
+        );
+    snapshot.masterGain =
+        static_cast<double>(
+            root->getProperty("masterGain")
+        );
+    snapshot.zoom =
+        static_cast<double>(
+            root->getProperty("zoom")
+        );
+    snapshot.view =
+        static_cast<double>(
+            root->getProperty("view")
+        );
+    snapshot.gridId =
+        static_cast<int>(
+            root->getProperty("gridId")
+        );
+    snapshot.snapEnabled =
+        static_cast<bool>(
+            root->getProperty("snapEnabled")
+        );
+
+    const auto tracksValue =
+        root->getProperty("tracks");
+
+    const auto* tracks = tracksValue.getArray();
+
+    if (tracks == nullptr)
+    {
+        return juce::Result::fail(
+            "La liste des pistes est absente du projet."
+        );
+    }
+
+    snapshot.tracks.clear();
+    snapshot.tracks.reserve(
+        static_cast<size_t>(tracks->size())
+    );
+
+    for (const auto& value : *tracks)
+    {
+        const auto* track = value.getDynamicObject();
+
+        if (track == nullptr)
+        {
+            return juce::Result::fail(
+                "Une piste du projet est invalide."
+            );
+        }
+
+        const auto absolutePath =
+            track->getProperty("absolutePath").toString();
+
+        const auto relativePath =
+            track->getProperty("relativePath").toString();
+
+        auto sourceFile = juce::File(absolutePath);
+
+        if (! sourceFile.existsAsFile()
+            && relativePath.isNotEmpty())
+        {
+            const auto relativeFile =
+                projectFile.getParentDirectory()
+                    .getChildFile(relativePath);
+
+            if (relativeFile.existsAsFile())
+                sourceFile = relativeFile;
+        }
+
+        if (! sourceFile.existsAsFile())
+        {
+            missingFiles.add(
+                absolutePath.isNotEmpty()
+                    ? absolutePath
+                    : relativePath
+            );
+            continue;
+        }
+
+        AudioEngine::TrackState state;
+        state.sourceFile = sourceFile;
+        state.startOffsetSeconds =
+            static_cast<double>(
+                track->getProperty(
+                    "startOffsetSeconds"
+                )
+            );
+        state.sourceStartSeconds =
+            static_cast<double>(
+                track->getProperty(
+                    "sourceStartSeconds"
+                )
+            );
+        state.sourceEndSeconds =
+            static_cast<double>(
+                track->getProperty(
+                    "sourceEndSeconds"
+                )
+            );
+        state.gain =
+            static_cast<float>(
+                static_cast<double>(
+                    track->getProperty("gain")
+                )
+            );
+        state.pan =
+            static_cast<float>(
+                static_cast<double>(
+                    track->getProperty("pan")
+                )
+            );
+        state.muted =
+            static_cast<bool>(
+                track->getProperty("muted")
+            );
+        state.solo =
+            static_cast<bool>(
+                track->getProperty("solo")
+            );
+
+        snapshot.tracks.push_back(
+            std::move(state)
+        );
+    }
+
+    return juce::Result::ok();
+}
+
+void MainComponent::updateProjectTitle()
+{
+    auto text = juce::String("SonoForge Studio 0.5");
+
+    if (currentProjectFile.getFullPathName().isNotEmpty())
+    {
+        text += " - "
+            + currentProjectFile
+                .getFileNameWithoutExtension();
+    }
+
+    titleLabel.setText(
+        text,
+        juce::dontSendNotification
     );
 }
 
