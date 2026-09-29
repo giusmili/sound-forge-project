@@ -21,7 +21,7 @@ MainComponent::MainComponent()
     setSize(1320, 820);
 
     titleLabel.setText(
-        "SonoForge Studio 0.5.2",
+        "SonoForge Studio 0.6",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -86,6 +86,7 @@ MainComponent::MainComponent()
              &playButton,
              &pauseButton,
              &stopButton,
+             &recordButton,
              &audioSettingsButton,
              &snapButton
          })
@@ -275,9 +276,17 @@ MainComponent::MainComponent()
 
     stopButton.onClick = [this]
     {
+        if (audioEngine.isRecording())
+            finishAudioRecording();
+
         audioEngine.stop();
         updateTimeline(0.0);
         pauseButton.setEnabled(false);
+    };
+
+    recordButton.onClick = [this]
+    {
+        toggleRecording();
     };
 
     audioSettingsButton.onClick = [this]
@@ -427,6 +436,9 @@ void MainComponent::resized()
     );
     stopButton.setBounds(
         transportRow.removeFromLeft(76).reduced(5)
+    );
+    recordButton.setBounds(
+        transportRow.removeFromLeft(90).reduced(5)
     );
     transportRow.removeFromLeft(12);
     timeLabel.setBounds(
@@ -652,6 +664,9 @@ void MainComponent::saveProjectWithCompletion(
     std::function<void(bool)> completion
 )
 {
+    if (audioEngine.isRecording())
+        finishAudioRecording();
+
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
         const auto success =
@@ -739,6 +754,9 @@ void MainComponent::confirmSaveBeforeAction(
     std::function<void()> continuation
 )
 {
+    if (audioEngine.isRecording())
+        finishAudioRecording();
+
     if (! hasUnsavedChanges())
     {
         if (continuation)
@@ -1098,7 +1116,7 @@ juce::var MainComponent::serialiseSnapshot(
 
     root->setProperty("format", "SonoForgeProject");
     root->setProperty("formatVersion", 1);
-    root->setProperty("appVersion", "0.5.2");
+    root->setProperty("appVersion", "0.6.0");
     root->setProperty(
         "positionSeconds",
         snapshot.positionSeconds
@@ -1336,7 +1354,7 @@ juce::Result MainComponent::deserialiseSnapshot(
 
 void MainComponent::updateProjectTitle()
 {
-    auto text = juce::String("SonoForge Studio 0.5.2");
+    auto text = juce::String("SonoForge Studio 0.6");
 
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
@@ -1939,6 +1957,174 @@ void MainComponent::updateHistoryButtons()
     redoButton.setEnabled(! redoStack.empty());
 }
 
+void MainComponent::toggleRecording()
+{
+    if (audioEngine.isRecording())
+        finishAudioRecording();
+    else
+        startAudioRecording();
+}
+
+void MainComponent::startAudioRecording()
+{
+    if (audioEngine.isRecording())
+        return;
+
+    const auto directory =
+        getRecordingDirectory();
+
+    if (! directory.exists()
+        && ! directory.createDirectory())
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Enregistrement impossible",
+            "Impossible de creer le dossier Audio."
+        );
+        return;
+    }
+
+    activeRecordingFile =
+        directory.getChildFile(
+            "Recording_"
+            + juce::String(
+                juce::Time::currentTimeMillis()
+            )
+            + ".wav"
+        );
+
+    recordingUndoSnapshot =
+        std::make_unique<ProjectSnapshot>(
+            captureSnapshot()
+        );
+
+    const auto result =
+        audioEngine.startRecording(
+            activeRecordingFile
+        );
+
+    if (result.failed())
+    {
+        recordingUndoSnapshot.reset();
+        activeRecordingFile = {};
+
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Enregistrement impossible",
+            result.getErrorMessage()
+        );
+        return;
+    }
+
+    activeRecordingStart =
+        audioEngine.getRecordingStartPosition();
+
+    recordButton.setButtonText("Stop Rec");
+    recordButton.setColour(
+        juce::TextButton::buttonColourId,
+        juce::Colour(0xffb13b3b)
+    );
+
+    playButton.setEnabled(false);
+    pauseButton.setEnabled(false);
+    openProjectButton.setEnabled(false);
+    audioSettingsButton.setEnabled(false);
+}
+
+void MainComponent::finishAudioRecording()
+{
+    if (! audioEngine.isRecording())
+        return;
+
+    audioEngine.stopRecording();
+
+    recordButton.setButtonText("Record");
+    recordButton.setColour(
+        juce::TextButton::buttonColourId,
+        juce::Colour(panelColour)
+    );
+
+    openProjectButton.setEnabled(true);
+    audioSettingsButton.setEnabled(true);
+
+    if (! activeRecordingFile.existsAsFile()
+        || activeRecordingFile.getSize() <= 44)
+    {
+        recordingUndoSnapshot.reset();
+        activeRecordingFile = {};
+
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Enregistrement vide",
+            "Aucun contenu audio exploitable n'a ete enregistre."
+        );
+
+        updateProjectState();
+        return;
+    }
+
+    AudioTrack* createdTrack = nullptr;
+
+    const auto result =
+        audioEngine.addTrackFromFile(
+            activeRecordingFile,
+            createdTrack
+        );
+
+    if (result.failed() || createdTrack == nullptr)
+    {
+        recordingUndoSnapshot.reset();
+
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Import de l'enregistrement impossible",
+            result.getErrorMessage()
+        );
+
+        activeRecordingFile = {};
+        updateProjectState();
+        return;
+    }
+
+    createdTrack->setStartOffsetSeconds(
+        activeRecordingStart
+    );
+
+    audioEngine.refreshTrackAlignment();
+
+    auto* row = addTrackRow(*createdTrack);
+    selectRow(row);
+
+    if (recordingUndoSnapshot != nullptr)
+    {
+        pushUndoSnapshot(
+            *recordingUndoSnapshot
+        );
+    }
+
+    recordingUndoSnapshot.reset();
+    activeRecordingFile = {};
+
+    updateProjectState();
+}
+
+juce::File MainComponent::getRecordingDirectory() const
+{
+    if (currentProjectFile
+            .getFullPathName()
+            .isNotEmpty())
+    {
+        return currentProjectFile
+            .getParentDirectory()
+            .getChildFile("Audio");
+    }
+
+    return juce::File::getSpecialLocation(
+        juce::File::userDocumentsDirectory
+    )
+        .getChildFile("SonoForge Recordings");
+}
+
 void MainComponent::updateGridSettings()
 {
     const auto interval =
@@ -2030,11 +2216,14 @@ bool MainComponent::canSplitSelectedClip() const
 
 void MainComponent::showAudioSettings()
 {
+    if (audioEngine.isRecording())
+        return;
+
     auto* selector =
         new juce::AudioDeviceSelectorComponent(
             audioEngine.getDeviceManager(),
             0,
-            0,
+            2,
             0,
             2,
             false,
@@ -2063,7 +2252,16 @@ void MainComponent::timerCallback()
         audioEngine.getPositionSeconds();
 
     updateTimeline(current);
-    pauseButton.setEnabled(audioEngine.isPlaying());
+
+    if (! audioEngine.isRecording())
+    {
+        pauseButton.setEnabled(audioEngine.isPlaying());
+        recordButton.setEnabled(true);
+    }
+    else
+    {
+        pauseButton.setEnabled(false);
+    }
 
     const auto now =
         juce::Time::getMillisecondCounterHiRes();
