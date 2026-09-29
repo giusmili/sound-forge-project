@@ -52,6 +52,15 @@ void AudioEngine::getNextAudioBlock(
         bufferToFill.numSamples,
         juce::jlimit(0.0f, 1.0f, masterGain.load())
     );
+
+    const auto leftPeak = bufferToFill.buffer->getNumChannels() > 0
+        ? bufferToFill.buffer->getMagnitude(0, bufferToFill.startSample, bufferToFill.numSamples)
+        : 0.0f;
+    const auto rightPeak = bufferToFill.buffer->getNumChannels() > 1
+        ? bufferToFill.buffer->getMagnitude(1, bufferToFill.startSample, bufferToFill.numSamples)
+        : leftPeak;
+    masterPeakLeft.store(leftPeak);
+    masterPeakRight.store(rightPeak);
 }
 
 juce::Result AudioEngine::addTrackFromFile(
@@ -185,6 +194,16 @@ double AudioEngine::getLengthSeconds() const
 int AudioEngine::getTrackCount() const noexcept
 {
     return static_cast<int>(tracks.size());
+}
+
+float AudioEngine::getMasterPeakLeft() const noexcept
+{
+    return masterPeakLeft.load();
+}
+
+float AudioEngine::getMasterPeakRight() const noexcept
+{
+    return masterPeakRight.load();
 }
 
 juce::AudioDeviceManager& AudioEngine::getDeviceManager() noexcept
