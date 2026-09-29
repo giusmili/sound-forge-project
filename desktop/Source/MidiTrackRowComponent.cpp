@@ -210,6 +210,15 @@ MidiTrackRowComponent::getTrack() noexcept
     return track;
 }
 
+void MidiTrackRowComponent::syncControlsFromTrack()
+{
+    volumeSlider.setValue(
+        track.getGain(),
+        juce::dontSendNotification
+    );
+    refreshMuteButton();
+}
+
 void MidiTrackRowComponent::timerCallback()
 {
     stopTimer();
