@@ -25,6 +25,8 @@ private:
     juce::TextButton soloButton { "S" };
     juce::Slider gainSlider;
     juce::Slider panSlider;
+    float displayPeakLeft = 0.0f;
+    float displayPeakRight = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerChannelComponent)
 };
