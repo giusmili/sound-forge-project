@@ -10,15 +10,16 @@ constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto snapColour = 0xff3d8f68;
 constexpr int trackRowHeight = 112;
+constexpr double minimumSplitMarginSeconds = 0.01;
 }
 
 MainComponent::MainComponent()
 {
     setOpaque(true);
-    setSize(1260, 820);
+    setSize(1320, 820);
 
     titleLabel.setText(
-        "SonoForge Studio 0.4",
+        "SonoForge Studio 0.4.1",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -73,6 +74,7 @@ MainComponent::MainComponent()
     for (auto* button : {
              &openButton,
              &duplicateButton,
+             &splitButton,
              &deleteButton,
              &playButton,
              &pauseButton,
@@ -185,6 +187,11 @@ MainComponent::MainComponent()
     duplicateButton.onClick = [this]
     {
         duplicateSelectedClip();
+    };
+
+    splitButton.onClick = [this]
+    {
+        splitSelectedClip();
     };
 
     deleteButton.onClick = [this]
@@ -304,9 +311,12 @@ void MainComponent::resized()
     projectLabel.setBounds(
         importRow.removeFromLeft(120)
     );
-    importRow.removeFromLeft(10);
+    importRow.removeFromLeft(8);
     duplicateButton.setBounds(
         importRow.removeFromLeft(110).reduced(4)
+    );
+    splitButton.setBounds(
+        importRow.removeFromLeft(90).reduced(4)
     );
     deleteButton.setBounds(
         importRow.removeFromLeft(105).reduced(4)
@@ -569,6 +579,8 @@ void MainComponent::updateTimeline(
             + formatTime(length),
         juce::dontSendNotification
     );
+
+    splitButton.setEnabled(canSplitSelectedClip());
 }
 
 void MainComponent::updateProjectState()
@@ -588,11 +600,13 @@ void MainComponent::updateProjectState()
     stopButton.setEnabled(hasTracks);
     duplicateButton.setEnabled(hasSelection);
     deleteButton.setEnabled(hasSelection);
+    splitButton.setEnabled(canSplitSelectedClip());
 
     if (! hasTracks)
     {
         selectedRow = nullptr;
         pauseButton.setEnabled(false);
+        splitButton.setEnabled(false);
     }
 
     layoutTracks();
@@ -634,6 +648,7 @@ void MainComponent::selectRow(
 
     duplicateButton.setEnabled(selectedRow != nullptr);
     deleteButton.setEnabled(selectedRow != nullptr);
+    splitButton.setEnabled(canSplitSelectedClip());
 }
 
 void MainComponent::duplicateSelectedClip()
@@ -667,6 +682,36 @@ void MainComponent::duplicateSelectedClip()
 
     auto* newRow = addTrackRow(*createdTrack);
     selectRow(newRow);
+
+    updateProjectState();
+}
+
+void MainComponent::splitSelectedClip()
+{
+    if (selectedRow == nullptr)
+        return;
+
+    AudioTrack* rightTrack = nullptr;
+
+    const auto result =
+        audioEngine.splitTrackAtProjectPosition(
+            selectedRow->getTrack(),
+            audioEngine.getPositionSeconds(),
+            rightTrack
+        );
+
+    if (result.failed() || rightTrack == nullptr)
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Decoupage impossible",
+            result.getErrorMessage()
+        );
+        return;
+    }
+
+    auto* rightRow = addTrackRow(*rightTrack);
+    selectRow(rightRow);
 
     updateProjectState();
 }
@@ -770,6 +815,26 @@ double MainComponent::getGridIntervalSeconds() const
         default:
             return beat;
     }
+}
+
+bool MainComponent::canSplitSelectedClip() const
+{
+    if (selectedRow == nullptr)
+        return false;
+
+    const auto& track = selectedRow->getTrack();
+
+    const auto playhead =
+        audioEngine.getPositionSeconds();
+
+    const auto start =
+        track.getStartOffsetSeconds();
+
+    const auto end =
+        track.getProjectEndSeconds();
+
+    return playhead > start + minimumSplitMarginSeconds
+        && playhead < end - minimumSplitMarginSeconds;
 }
 
 void MainComponent::showAudioSettings()

@@ -26,6 +26,7 @@ private:
     void clipMoved();
     void selectRow(TrackRowComponent* row);
     void duplicateSelectedClip();
+    void splitSelectedClip();
     void deleteSelectedClip();
     void updateGridSettings();
     void showAudioSettings();
@@ -34,6 +35,7 @@ private:
     [[nodiscard]] double getViewDuration(double projectLength) const;
     [[nodiscard]] double getViewStart(double projectLength, double viewDuration) const;
     [[nodiscard]] double getGridIntervalSeconds() const;
+    [[nodiscard]] bool canSplitSelectedClip() const;
 
     static juce::String formatTime(double seconds);
 
@@ -50,6 +52,7 @@ private:
 
     juce::TextButton openButton { "Importer pistes" };
     juce::TextButton duplicateButton { "Dupliquer" };
+    juce::TextButton splitButton { "Couper" };
     juce::TextButton deleteButton { "Supprimer" };
     juce::TextButton playButton { "Play" };
     juce::TextButton pauseButton { "Pause" };

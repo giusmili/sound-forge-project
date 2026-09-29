@@ -24,6 +24,12 @@ public:
         AudioTrack*& createdTrack
     );
 
+    juce::Result splitTrackAtProjectPosition(
+        AudioTrack& sourceTrack,
+        double projectPositionSeconds,
+        AudioTrack*& rightTrack
+    );
+
     bool removeTrack(AudioTrack* trackToRemove);
 
     void play();
