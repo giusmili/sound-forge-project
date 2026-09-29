@@ -1,67 +1,84 @@
-# SonoForge Studio Desktop 0.5.1
+# SonoForge Studio Desktop 0.5.2
 
-Cette iteration ajoute l'autosave et une sauvegarde de secours avant ecrasement manuel.
+Cette iteration securise la fermeture de l'application et ajoute les projets recents.
 
-## Autosave
+## Modifications non enregistrees
 
-SonoForge verifie l'etat du projet toutes les 30 secondes.
+SonoForge compare l'etat courant du projet a la derniere sauvegarde manuelle ou au dernier projet ouvert.
 
-Le fichier n'est reecrit que si le contenu de la session a reellement change.
+Les modifications prises en compte comprennent notamment :
 
-Pour un projet deja enregistre :
-
-```text
-MonProjet.sonoforge
-MonProjet.autosave.sonoforge
-```
-
-Pour une session qui n'a pas encore de nom, la recuperation est stockee dans le dossier de donnees utilisateur :
-
-```text
-SonoForge/Autosave/Recovery.autosave.sonoforge
-```
-
-## Recuperer
-
-Le bouton Recuperer devient disponible lorsqu'un autosave exploitable existe.
-
-Pour un projet nomme, l'autosave doit etre plus recent que le fichier principal pour etre propose.
-
-La recuperation restaure la session sans transformer le fichier autosave en projet principal.
-
-## Sauvegarde de secours
-
-Avant d'ecraser manuellement un projet existant, SonoForge copie l'ancienne version :
-
-```text
-MonProjet.backup.sonoforge
-```
-
-Si cette copie de secours ne peut pas etre creee, SonoForge refuse d'ecraser le fichier principal.
-
-Apres une sauvegarde manuelle reussie, l'autosave devenu inutile est supprime.
-
-## Contenu protege
-
-Autosave, Backup et projet principal utilisent le meme format versionne. Ils conservent :
-
-- fichiers audio sources
-- sourceStart / sourceEnd
-- startOffset
-- volume et pan
-- Mute / Solo
-- playhead
+- import, suppression et duplication de clips
+- deplacement, Split et Trim
+- plages source non destructives
+- gain et pan
+- Mute et Solo
 - BPM
 - grille et snapping
-- zoom et vue
-- Master
+- niveau Master
 
-## Format
+La simple navigation, comme le deplacement du playhead, le zoom ou la position de vue, ne marque pas le projet comme modifie.
+
+Lorsqu'un projet contient des changements non enregistres, le titre affiche un astérisque :
+
+```text
+SonoForge Studio 0.5.2 - MonProjet *
+```
+
+## Fermeture securisee
+
+Si l'utilisateur ferme SonoForge avec des changements non sauvegardes, trois choix sont proposes :
+
+```text
+Enregistrer
+Ne pas enregistrer
+Annuler
+```
+
+Enregistrer effectue la sauvegarde avant de quitter. Pour un projet sans nom, le selecteur de fichier est affiche.
+
+Annuler laisse l'application ouverte.
+
+## Changement de projet securise
+
+La meme protection est appliquee avant :
+
+- l'ouverture d'un autre projet
+- l'ouverture d'un projet recent
+- la recuperation d'un autosave
+
+Une session modifiee ne peut donc pas etre remplacee silencieusement.
+
+## Projets recents
+
+SonoForge conserve jusqu'a 8 projets recents entre les lancements.
+
+Ils sont presentes dans la liste Projets recents en haut de la fenetre.
+
+Le fichier de configuration est stocke dans le dossier de donnees utilisateur SonoForge :
+
+```text
+SonoForge/recent-projects.txt
+```
+
+Les chemins devenus invalides sont retires automatiquement de la liste.
+
+## Autosave et backup
+
+Les protections de la 0.5.1 restent actives :
+
+- autosave toutes les 30 secondes si l'etat a change
+- fichier .autosave.sonoforge
+- fichier .backup.sonoforge avant ecrasement manuel
+- bouton Recuperer
+- refus d'ecraser le projet principal si le backup echoue
+
+## Format projet
 
 ```text
 SonoForgeProject
 formatVersion = 1
-appVersion = 0.5.1
+appVersion = 0.5.2
 ```
 
 ## Fonctions conservees
@@ -71,7 +88,8 @@ appVersion = 0.5.1
 - Split et Trim non destructifs
 - selection / duplication / suppression
 - Undo / Redo
-- sauvegarde et ouverture .sonoforge
+- sauvegarde / ouverture .sonoforge
+- autosave et backup
 - detection des medias manquants
 - grille 1/4, 1/8, 1/16
 - BPM et snapping
@@ -82,9 +100,13 @@ appVersion = 0.5.1
 
 ## Prochaine iteration
 
-- fermeture securisee avec detection des modifications non sauvegardees
-- projet recent
-- puis enregistrement audio
+La base de session est maintenant assez solide pour commencer l'enregistrement audio :
+
+- entree audio
+- armement d'une piste
+- Record / Stop
+- creation du fichier WAV
+- insertion automatique du nouveau clip dans le projet
 
 ## Compilation Windows
 

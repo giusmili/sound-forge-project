@@ -13,7 +13,7 @@ public:
 
     const juce::String getApplicationVersion() override
     {
-        return "0.5.1";
+        return "0.5.2";
     }
 
     bool moreThanOneInstanceAllowed() override
@@ -68,8 +68,29 @@ private:
 
         void closeButtonPressed() override
         {
-            juce::JUCEApplication::getInstance()
-                ->systemRequestedQuit();
+            if (auto* mainComponent =
+                    dynamic_cast<MainComponent*>(
+                        getContentComponent()
+                    ))
+            {
+                mainComponent->requestApplicationQuit(
+                    []
+                    {
+                        if (auto* application =
+                                juce::JUCEApplication::getInstance())
+                        {
+                            application->quit();
+                        }
+                    }
+                );
+                return;
+            }
+
+            if (auto* application =
+                    juce::JUCEApplication::getInstance())
+            {
+                application->quit();
+            }
         }
     };
 
