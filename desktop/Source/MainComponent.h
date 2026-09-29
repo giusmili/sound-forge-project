@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 
 #include "AudioEngine.h"
+#include "TrackRowComponent.h"
 
 class MainComponent final : public juce::Component,
                             private juce::Timer
@@ -15,7 +16,9 @@ public:
     void resized() override;
 
 private:
-    void openAudioFile();
+    void openAudioFiles();
+    void addTrackRow(AudioTrack& track);
+    void layoutTracks();
     void showAudioSettings();
     void timerCallback() override;
 
@@ -24,16 +27,20 @@ private:
     AudioEngine audioEngine;
 
     juce::Label titleLabel;
-    juce::Label fileLabel;
+    juce::Label projectLabel;
     juce::Label timeLabel;
-    juce::Label volumeLabel;
+    juce::Label masterLabel;
 
-    juce::TextButton openButton { "Importer audio" };
+    juce::TextButton openButton { "Importer pistes" };
     juce::TextButton playButton { "Play" };
     juce::TextButton stopButton { "Stop" };
     juce::TextButton audioSettingsButton { "Audio" };
 
-    juce::Slider volumeSlider;
+    juce::Slider masterSlider;
+
+    juce::Component trackList;
+    juce::Viewport trackViewport;
+    juce::OwnedArray<TrackRowComponent> trackRows;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 

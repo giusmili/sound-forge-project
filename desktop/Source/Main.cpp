@@ -2,7 +2,8 @@
 
 #include "MainComponent.h"
 
-class SonoForgeApplication final : public juce::JUCEApplication
+class SonoForgeApplication final
+    : public juce::JUCEApplication
 {
 public:
     const juce::String getApplicationName() override
@@ -12,7 +13,7 @@ public:
 
     const juce::String getApplicationVersion() override
     {
-        return "0.1.0";
+        return "0.2.0";
     }
 
     bool moreThanOneInstanceAllowed() override
@@ -22,7 +23,10 @@ public:
 
     void initialise(const juce::String&) override
     {
-        mainWindow = std::make_unique<MainWindow>(getApplicationName());
+        mainWindow =
+            std::make_unique<MainWindow>(
+                getApplicationName()
+            );
     }
 
     void shutdown() override
@@ -36,26 +40,36 @@ public:
     }
 
 private:
-    class MainWindow final : public juce::DocumentWindow
+    class MainWindow final
+        : public juce::DocumentWindow
     {
     public:
-        explicit MainWindow(const juce::String& name)
+        explicit MainWindow(
+            const juce::String& name
+        )
             : DocumentWindow(
-                name,
-                juce::Colour(0xff111318),
-                DocumentWindow::allButtons
-            )
+                  name,
+                  juce::Colour(0xff111318),
+                  DocumentWindow::allButtons
+              )
         {
             setUsingNativeTitleBar(true);
-            setContentOwned(new MainComponent(), true);
+            setContentOwned(
+                new MainComponent(),
+                true
+            );
             setResizable(true, true);
-            centreWithSize(getWidth(), getHeight());
+            centreWithSize(
+                getWidth(),
+                getHeight()
+            );
             setVisible(true);
         }
 
         void closeButtonPressed() override
         {
-            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+            juce::JUCEApplication::getInstance()
+                ->systemRequestedQuit();
         }
     };
 

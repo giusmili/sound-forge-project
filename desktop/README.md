@@ -1,25 +1,29 @@
 # SonoForge Studio Desktop
 
-Premiere base native du projet SonoForge Studio.
+Base native du projet SonoForge Studio.
 
-## Objectif de cette etape
+## Etat actuel
 
-La version 0.1 Desktop fournit le socle minimum du futur DAW :
+La branche de developpement 0.2 ajoute un premier moteur multipiste au socle 0.1 :
 
-- application native C++/JUCE
-- initialisation de la sortie audio
-- import WAV, AIFF, FLAC, OGG et MP3 selon le support JUCE
-- lecture et arret
+- application native C++20 / JUCE 9.0.2
+- sortie audio Windows
+- import de plusieurs fichiers WAV, AIFF, FLAC, OGG et MP3
+- lecture simultanee de plusieurs pistes
+- volume individuel jusqu'a +3.5 dB environ
+- panoramique gauche / droite
+- mute par piste
+- volume Master
+- transport Play / Stop
 - compteur temporel
-- volume master
-- fenetre de configuration du peripherique audio
+- configuration du peripherique audio
 
-Cette etape ne cherche pas encore a reproduire une timeline multipiste complete. Le but est d'abord de stabiliser le moteur audio.
+La prochaine sous-etape ajoutera la representation graphique des clips et des waveforms.
 
 ## Prerequis Windows
 
 - Windows 11
-- Visual Studio 2022 avec le workload "Desktop development with C++"
+- Visual Studio 2022 avec le workload Desktop development with C++
 - CMake 3.22 ou plus recent
 - Git
 
@@ -39,17 +43,22 @@ cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release --parallel
 ```
 
-L'executable est genere dans le dossier d'artefacts CMake/JUCE du build.
+## Architecture en cours
 
-## Prochaine etape
+```text
+MainComponent
+    |
+    v
+AudioEngine
+    |
+    +-- MixerAudioSource
+          |
+          +-- AudioTrack 1
+          +-- AudioTrack 2
+          +-- AudioTrack N
+```
 
-Le prochain jalon ajoutera :
-
-- timeline
-- pistes audio multiples
-- waveform
-- positionnement des clips
-- mute / solo / volume / pan par piste
+Chaque piste possede son propre transport et ses propres reglages. Le moteur melange les pistes avant d'appliquer le gain Master.
 
 ## Licence JUCE
 
