@@ -10,16 +10,15 @@ constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto snapColour = 0xff3d8f68;
 constexpr int trackRowHeight = 112;
-constexpr double snapIntervalSeconds = 1.0;
 }
 
 MainComponent::MainComponent()
 {
     setOpaque(true);
-    setSize(1180, 800);
+    setSize(1220, 800);
 
     titleLabel.setText(
-        "SonoForge Studio 0.3.1",
+        "SonoForge Studio 0.3.2",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -54,35 +53,24 @@ MainComponent::MainComponent()
     );
     addAndMakeVisible(timeLabel);
 
-    masterLabel.setText(
-        "Master",
-        juce::dontSendNotification
-    );
-    masterLabel.setColour(
-        juce::Label::textColourId,
-        juce::Colour(textColour)
-    );
-    addAndMakeVisible(masterLabel);
+    for (auto* label : {
+             &masterLabel,
+             &bpmLabel,
+             &zoomLabel,
+             &viewLabel
+         })
+    {
+        label->setColour(
+            juce::Label::textColourId,
+            juce::Colour(textColour)
+        );
+        addAndMakeVisible(*label);
+    }
 
-    zoomLabel.setText(
-        "Zoom",
-        juce::dontSendNotification
-    );
-    zoomLabel.setColour(
-        juce::Label::textColourId,
-        juce::Colour(textColour)
-    );
-    addAndMakeVisible(zoomLabel);
-
-    viewLabel.setText(
-        "Vue",
-        juce::dontSendNotification
-    );
-    viewLabel.setColour(
-        juce::Label::textColourId,
-        juce::Colour(textColour)
-    );
-    addAndMakeVisible(viewLabel);
+    masterLabel.setText("Master", juce::dontSendNotification);
+    bpmLabel.setText("BPM", juce::dontSendNotification);
+    zoomLabel.setText("Zoom", juce::dontSendNotification);
+    viewLabel.setText("Vue", juce::dontSendNotification);
 
     for (auto* button : {
              &openButton,
@@ -134,6 +122,19 @@ MainComponent::MainComponent()
         juce::Colour(accentColour)
     );
     addAndMakeVisible(masterSlider);
+
+    bpmSlider.setRange(40.0, 240.0, 1.0);
+    bpmSlider.setValue(120.0);
+    bpmSlider.setSliderStyle(
+        juce::Slider::LinearHorizontal
+    );
+    bpmSlider.setTextBoxStyle(
+        juce::Slider::TextBoxRight,
+        false,
+        50,
+        22
+    );
+    addAndMakeVisible(bpmSlider);
 
     zoomSlider.setRange(1.0, 8.0, 0.25);
     zoomSlider.setValue(1.0);
@@ -210,6 +211,14 @@ MainComponent::MainComponent()
     {
         audioEngine.setMasterGain(
             static_cast<float>(masterSlider.getValue())
+        );
+    };
+
+    bpmSlider.onValueChange = [this]
+    {
+        updateSnapSettings();
+        updateTimeline(
+            audioEngine.getPositionSeconds()
         );
     };
 
@@ -302,25 +311,34 @@ void MainComponent::resized()
     auto viewRow = area.removeFromTop(40);
 
     snapButton.setBounds(
-        viewRow.removeFromLeft(96).reduced(3)
+        viewRow.removeFromLeft(104).reduced(3)
     );
 
     viewRow.removeFromLeft(8);
+
+    bpmLabel.setBounds(
+        viewRow.removeFromLeft(38)
+    );
+    bpmSlider.setBounds(
+        viewRow.removeFromLeft(140).reduced(3)
+    );
+
+    viewRow.removeFromLeft(10);
 
     zoomLabel.setBounds(
         viewRow.removeFromLeft(46)
     );
     zoomSlider.setBounds(
-        viewRow.removeFromLeft(190).reduced(3)
+        viewRow.removeFromLeft(170).reduced(3)
     );
 
-    viewRow.removeFromLeft(12);
+    viewRow.removeFromLeft(10);
 
     viewLabel.setBounds(
         viewRow.removeFromLeft(38)
     );
     viewSlider.setBounds(
-        viewRow.removeFromLeft(300).reduced(3)
+        viewRow.removeFromLeft(260).reduced(3)
     );
 
     area.removeFromTop(6);
@@ -436,7 +454,7 @@ void MainComponent::addTrackRow(AudioTrack& track)
 
     row->setSnapSettings(
         snapButton.getToggleState(),
-        snapIntervalSeconds
+        getBeatIntervalSeconds()
     );
 
     trackList.addAndMakeVisible(row);
@@ -493,7 +511,8 @@ void MainComponent::updateTimeline(
         length,
         viewStart,
         viewDuration,
-        position
+        position,
+        getBeatIntervalSeconds()
     );
 
     for (auto* row : trackRows)
@@ -534,11 +553,14 @@ void MainComponent::clipMoved()
 
 void MainComponent::updateSnapSettings()
 {
+    const auto interval =
+        getBeatIntervalSeconds();
+
     for (auto* row : trackRows)
     {
         row->setSnapSettings(
             snapButton.getToggleState(),
-            snapIntervalSeconds
+            interval
         );
     }
 }
@@ -573,6 +595,16 @@ double MainComponent::getViewStart(
     );
 
     return viewSlider.getValue() * maxStart;
+}
+
+double MainComponent::getBeatIntervalSeconds() const
+{
+    const auto bpm = juce::jmax(
+        1.0,
+        bpmSlider.getValue()
+    );
+
+    return 60.0 / bpm;
 }
 
 void MainComponent::showAudioSettings()

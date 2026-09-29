@@ -6,6 +6,7 @@ namespace
 {
 constexpr auto backgroundColour = 0xff171b21;
 constexpr auto separatorColour = 0xff363d48;
+constexpr auto gridColour = 0xff29313b;
 constexpr auto textColour = 0xffaeb8c5;
 constexpr auto playheadColour = 0xffffb347;
 }
@@ -39,8 +40,41 @@ void TimelineRulerComponent::paint(juce::Graphics& graphics)
         return;
     }
 
-    const auto interval = chooseTickInterval();
     const auto viewEnd = viewStart + viewDuration;
+
+    if (gridInterval > 0.0)
+    {
+        auto firstGrid =
+            std::floor(viewStart / gridInterval) * gridInterval;
+
+        if (firstGrid < viewStart - 0.001)
+            firstGrid += gridInterval;
+
+        graphics.setColour(juce::Colour(gridColour));
+
+        for (double beat = firstGrid;
+             beat <= viewEnd + 0.001;
+             beat += gridInterval)
+        {
+            const auto ratio =
+                (beat - viewStart) / viewDuration;
+
+            const auto x = timeline.getX()
+                + static_cast<int>(
+                    std::round(
+                        ratio * timeline.getWidth()
+                    )
+                );
+
+            graphics.drawVerticalLine(
+                x,
+                20.0f,
+                static_cast<float>(getHeight())
+            );
+        }
+    }
+
+    const auto interval = chooseTickInterval();
 
     auto firstTick =
         std::floor(viewStart / interval) * interval;
@@ -68,7 +102,7 @@ void TimelineRulerComponent::paint(juce::Graphics& graphics)
         graphics.setColour(juce::Colour(separatorColour));
         graphics.drawVerticalLine(
             x,
-            16.0f,
+            15.0f,
             static_cast<float>(getHeight())
         );
 
@@ -150,7 +184,8 @@ void TimelineRulerComponent::setView(
     const double projectLengthSeconds,
     const double viewStartSeconds,
     const double viewDurationSeconds,
-    const double positionSeconds
+    const double positionSeconds,
+    const double gridIntervalSeconds
 )
 {
     projectLength = juce::jmax(
@@ -179,6 +214,11 @@ void TimelineRulerComponent::setView(
         0.0,
         projectLength,
         positionSeconds
+    );
+
+    gridInterval = juce::jmax(
+        0.0,
+        gridIntervalSeconds
     );
 
     repaint();

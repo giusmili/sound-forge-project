@@ -14,7 +14,8 @@ public:
         double projectLengthSeconds,
         double viewStartSeconds,
         double viewDurationSeconds,
-        double positionSeconds
+        double positionSeconds,
+        double gridIntervalSeconds
     );
 
     std::function<void(double)> onSeek;
@@ -29,6 +30,7 @@ private:
     double viewStart = 0.0;
     double viewDuration = 0.0;
     double position = 0.0;
+    double gridInterval = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineRulerComponent)
 };

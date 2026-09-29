@@ -6,6 +6,7 @@ namespace
 {
 constexpr auto rowColour = 0xff222831;
 constexpr auto timelineColour = 0xff15191f;
+constexpr auto gridColour = 0xff252c34;
 constexpr auto clipColour = 0xff244d6e;
 constexpr auto clipDragColour = 0xff2f6f9d;
 constexpr auto waveformColour = 0xff81c7ff;
@@ -144,6 +145,43 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
 
     if (projectLength > 0.0 && viewDuration > 0.0)
     {
+        if (snapInterval > 0.0)
+        {
+            const auto viewEnd = viewStart + viewDuration;
+
+            auto firstGrid =
+                std::floor(viewStart / snapInterval)
+                * snapInterval;
+
+            if (firstGrid < viewStart - 0.001)
+                firstGrid += snapInterval;
+
+            graphics.setColour(juce::Colour(gridColour));
+
+            for (double beat = firstGrid;
+                 beat <= viewEnd + 0.001;
+                 beat += snapInterval)
+            {
+                const auto ratio =
+                    (beat - viewStart) / viewDuration;
+
+                const auto x =
+                    waveformBounds.getX()
+                    + static_cast<int>(
+                        std::round(
+                            ratio
+                            * waveformBounds.getWidth()
+                        )
+                    );
+
+                graphics.drawVerticalLine(
+                    x,
+                    static_cast<float>(waveformBounds.getY()),
+                    static_cast<float>(waveformBounds.getBottom())
+                );
+            }
+        }
+
         const auto clipBounds = getClipBounds();
 
         graphics.setColour(
@@ -422,6 +460,8 @@ void TrackRowComponent::setSnapSettings(
         0.001,
         intervalSeconds
     );
+
+    repaint();
 }
 
 void TrackRowComponent::changeListenerCallback(

@@ -29,6 +29,7 @@ private:
 
     [[nodiscard]] double getViewDuration(double projectLength) const;
     [[nodiscard]] double getViewStart(double projectLength, double viewDuration) const;
+    [[nodiscard]] double getBeatIntervalSeconds() const;
 
     static juce::String formatTime(double seconds);
 
@@ -38,6 +39,7 @@ private:
     juce::Label projectLabel;
     juce::Label timeLabel;
     juce::Label masterLabel;
+    juce::Label bpmLabel;
     juce::Label zoomLabel;
     juce::Label viewLabel;
 
@@ -46,9 +48,10 @@ private:
     juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
     juce::TextButton audioSettingsButton { "Audio" };
-    juce::TextButton snapButton { "Snap 1 s" };
+    juce::TextButton snapButton { "Snap Beat" };
 
     juce::Slider masterSlider;
+    juce::Slider bpmSlider;
     juce::Slider zoomSlider;
     juce::Slider viewSlider;
 
