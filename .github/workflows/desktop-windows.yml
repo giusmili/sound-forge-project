@@ -33,5 +33,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SonoForge-Windows
-          path: build/SonoForge_artefacts/Release/SonoForge.exe
+          path: "build/SonoForge_artefacts/Release/SonoForge Studio.exe"
           if-no-files-found: error
