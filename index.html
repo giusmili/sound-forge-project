@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SonoForge Studio 0.1</title>
+
+  <link rel="icon" type="image/svg+xml" href="favicon/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon/favicon-16x16.png" />
+  <link rel="shortcut icon" href="favicon/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0d1015" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">SF</div>
+        <div>
+          <div class="brand-title">SonoForge Studio</div>
+          <div class="brand-subtitle">DAW prototype 0.1</div>
+        </div>
+      </div>
+
+      <div class="transport" aria-label="Transport">
+        <button id="rewindBtn" class="transport-btn" title="Retour au début">|&lt;</button>
+        <button id="playBtn" class="transport-btn primary" title="Lecture">Play</button>
+        <button id="pauseBtn" class="transport-btn" title="Pause">Pause</button>
+        <button id="stopBtn" class="transport-btn" title="Stop">Stop</button>
+        <button id="loopBtn" class="transport-btn" title="Boucle projet">Loop</button>
+        <button id="metronomeBtn" class="transport-btn" title="Métronome">Metro</button>
+      </div>
+
+      <div class="project-meta">
+        <label>BPM <input id="bpmInput" type="number" value="120" min="30" max="300" /></label>
+        <label>Master <input id="masterVolume" type="range" min="0" max="1.5" step="0.01" value="1" /></label>
+        <span id="timeDisplay" class="time-display">00:00.000</span>
+      </div>
+    </header>
+
+    <section class="toolbar">
+      <div class="toolbar-group">
+        <label class="file-button">
+          Importer audio
+          <input id="fileInput" type="file" accept="audio/*" multiple hidden />
+        </label>
+        <button id="addEmptyTrackBtn">Ajouter piste vide</button>
+        <button id="exportBtn">Exporter le mix WAV</button>
+      </div>
+      <div class="toolbar-group zoom-group">
+        <label>Zoom horizontal
+          <input id="zoomRange" type="range" min="60" max="260" value="120" />
+        </label>
+      </div>
+      <div class="toolbar-status" id="statusText">Prêt</div>
+    </section>
+
+    <main class="workspace">
+      <aside class="inspector">
+        <h2>Projet</h2>
+        <div class="inspector-card">
+          <div class="metric"><span>Pistes</span><strong id="trackCount">0</strong></div>
+          <div class="metric"><span>Durée</span><strong id="projectDuration">00:00</strong></div>
+          <div class="metric"><span>Format export</span><strong>WAV 44.1 kHz</strong></div>
+        </div>
+        <h2>Fonctions V0.1</h2>
+        <ul class="feature-list">
+          <li>Lecture multipiste synchronisée</li>
+          <li>Waveforms</li>
+          <li>Volume et panoramique</li>
+          <li>Mute et Solo</li>
+          <li>Décalage temporel par piste</li>
+          <li>Métronome</li>
+          <li>Boucle projet</li>
+          <li>Export WAV stéréo</li>
+        </ul>
+      </aside>
+
+      <section class="arrangement-panel">
+        <div id="timelineHeader" class="timeline-header">
+          <div class="timeline-spacer"></div>
+          <div id="ruler" class="ruler" title="Cliquer pour déplacer le curseur"></div>
+        </div>
+
+        <div id="tracksContainer" class="tracks-container"></div>
+
+        <div id="dropZone" class="drop-zone">
+          Dépose ici des fichiers audio WAV, MP3, M4A, OGG ou FLAC pris en charge par ton navigateur.
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      SonoForge Studio 0.1 - prototype original de station audio multipiste.
+    </footer>
+  </div>
+
+  <template id="trackTemplate">
+    <article class="track-row">
+      <section class="track-controls">
+        <div class="track-title-row">
+          <input class="track-name" value="Piste" aria-label="Nom de la piste" />
+          <button class="remove-track danger" title="Supprimer la piste">X</button>
+        </div>
+        <div class="buttons-row">
+          <button class="mute-btn">M</button>
+          <button class="solo-btn">S</button>
+        </div>
+        <label>Volume
+          <input class="volume-slider" type="range" min="0" max="1.5" step="0.01" value="1" />
+        </label>
+        <label>Pan
+          <input class="pan-slider" type="range" min="-1" max="1" step="0.01" value="0" />
+        </label>
+        <label>Départ (s)
+          <input class="offset-input" type="number" min="0" step="0.1" value="0" />
+        </label>
+      </section>
+      <section class="track-lane">
+        <canvas class="waveform" height="118"></canvas>
+        <div class="clip-label"></div>
+        <div class="playhead-local"></div>
+      </section>
+    </article>
+  </template>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="SonoForge Studio">
+  <rect x="1.5" y="1.5" width="61" height="61" rx="14" fill="#23384a" stroke="#3e6785" stroke-width="2.2" />
+  <text x="32" y="33" text-anchor="middle" dominant-baseline="central"
+        font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="27"
+        fill="#dff3ff">SF</text>
+</svg>

@@ -1,0 +1,29 @@
+# Build output
+.dist/
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env / secrets
+.env
+.env.local
+
+# Misc
+*.tmp
+*.temp
