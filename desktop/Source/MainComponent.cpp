@@ -21,7 +21,7 @@ MainComponent::MainComponent()
     setSize(1320, 820);
 
     titleLabel.setText(
-        "SonoForge Studio 0.5.1",
+        "SonoForge Studio 0.5.2",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -119,6 +119,36 @@ MainComponent::MainComponent()
         juce::dontSendNotification
     );
     addAndMakeVisible(gridCombo);
+
+    recentProjectsCombo.setTextWhenNothingSelected(
+        "Projets recents"
+    );
+    recentProjectsCombo.onChange = [this]
+    {
+        const auto selectedId =
+            recentProjectsCombo.getSelectedId();
+
+        if (selectedId <= 0)
+            return;
+
+        const auto index = selectedId - 1;
+
+        recentProjectsCombo.setSelectedId(
+            0,
+            juce::dontSendNotification
+        );
+
+        if (juce::isPositiveAndBelow(
+                index,
+                recentProjectPaths.size()
+            ))
+        {
+            openRecentProject(
+                juce::File(recentProjectPaths[index])
+            );
+        }
+    };
+    addAndMakeVisible(recentProjectsCombo);
 
     masterSlider.setRange(0.0, 1.0, 0.01);
     masterSlider.setValue(0.8);
@@ -258,6 +288,7 @@ MainComponent::MainComponent()
     snapButton.onClick = [this]
     {
         updateGridSettings();
+        updateProjectTitle();
     };
 
     gridCombo.onChange = [this]
@@ -266,6 +297,7 @@ MainComponent::MainComponent()
         updateTimeline(
             audioEngine.getPositionSeconds()
         );
+        updateProjectTitle();
     };
 
     masterSlider.onValueChange = [this]
@@ -273,6 +305,7 @@ MainComponent::MainComponent()
         audioEngine.setMasterGain(
             static_cast<float>(masterSlider.getValue())
         );
+        updateProjectTitle();
     };
 
     bpmSlider.onValueChange = [this]
@@ -281,6 +314,7 @@ MainComponent::MainComponent()
         updateTimeline(
             audioEngine.getPositionSeconds()
         );
+        updateProjectTitle();
     };
 
     zoomSlider.onValueChange = [this]
@@ -304,6 +338,11 @@ MainComponent::MainComponent()
     startTimerHz(30);
     lastAutosaveCheckMs =
         juce::Time::getMillisecondCounterHiRes();
+
+    loadRecentProjects();
+    lastSavedFingerprint =
+        makeSnapshotFingerprint(captureSnapshot());
+
     updateProjectTitle();
     updateProjectState();
     updateRecoveryButton();
@@ -334,6 +373,9 @@ void MainComponent::resized()
     );
     audioSettingsButton.setBounds(
         header.removeFromRight(100).reduced(4)
+    );
+    recentProjectsCombo.setBounds(
+        header.removeFromRight(260).reduced(4)
     );
 
     area.removeFromTop(24);
@@ -454,6 +496,15 @@ void MainComponent::resized()
     layoutTracks();
 }
 
+void MainComponent::requestApplicationQuit(
+    std::function<void()> quitCallback
+)
+{
+    confirmSaveBeforeAction(
+        std::move(quitCallback)
+    );
+}
+
 void MainComponent::openAudioFiles()
 {
     fileChooser = std::make_unique<juce::FileChooser>(
@@ -549,16 +600,66 @@ void MainComponent::openProject()
             if (! file.existsAsFile())
                 return;
 
-            safeThis->loadProjectFile(file);
+            safeThis->confirmSaveBeforeAction(
+                [safeThis, file]
+                {
+                    if (safeThis != nullptr)
+                        safeThis->loadProjectFile(file);
+                }
+            );
+        }
+    );
+}
+
+void MainComponent::openRecentProject(
+    const juce::File& file
+)
+{
+    if (! file.existsAsFile())
+    {
+        recentProjectPaths.removeString(
+            file.getFullPathName()
+        );
+        saveRecentProjects();
+        refreshRecentProjectsCombo();
+
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Projet introuvable",
+            "Ce projet recent n'existe plus a cet emplacement."
+        );
+        return;
+    }
+
+    auto safeThis =
+        juce::Component::SafePointer<MainComponent>(this);
+
+    confirmSaveBeforeAction(
+        [safeThis, file]
+        {
+            if (safeThis != nullptr)
+                safeThis->loadProjectFile(file);
         }
     );
 }
 
 void MainComponent::saveProject()
 {
+    saveProjectWithCompletion({});
+}
+
+void MainComponent::saveProjectWithCompletion(
+    std::function<void(bool)> completion
+)
+{
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
-        writeProjectFile(currentProjectFile);
+        const auto success =
+            writeProjectFile(currentProjectFile);
+
+        if (completion)
+            completion(success);
+
         return;
     }
 
@@ -577,20 +678,32 @@ void MainComponent::saveProject()
         juce::FileBrowserComponent::saveMode
             | juce::FileBrowserComponent::canSelectFiles
             | juce::FileBrowserComponent::warnAboutOverwriting,
-        [safeThis](const juce::FileChooser& chooser)
+        [safeThis, completion](const juce::FileChooser& chooser)
         {
             if (safeThis == nullptr)
+            {
+                if (completion)
+                    completion(false);
                 return;
+            }
 
             auto file = chooser.getResult();
 
             if (file.getFullPathName().isEmpty())
+            {
+                if (completion)
+                    completion(false);
                 return;
+            }
 
             if (! file.hasFileExtension(".sonoforge"))
                 file = file.withFileExtension(".sonoforge");
 
-            safeThis->writeProjectFile(file);
+            const auto success =
+                safeThis->writeProjectFile(file);
+
+            if (completion)
+                completion(success);
         }
     );
 }
@@ -605,7 +718,79 @@ void MainComponent::recoverAutosave()
         return;
     }
 
-    loadProjectFile(autosaveFile, false);
+    auto safeThis =
+        juce::Component::SafePointer<MainComponent>(this);
+
+    confirmSaveBeforeAction(
+        [safeThis, autosaveFile]
+        {
+            if (safeThis != nullptr)
+            {
+                safeThis->loadProjectFile(
+                    autosaveFile,
+                    false
+                );
+            }
+        }
+    );
+}
+
+void MainComponent::confirmSaveBeforeAction(
+    std::function<void()> continuation
+)
+{
+    if (! hasUnsavedChanges())
+    {
+        if (continuation)
+            continuation();
+        return;
+    }
+
+    auto safeThis =
+        juce::Component::SafePointer<MainComponent>(this);
+
+    auto options = juce::MessageBoxOptions()
+        .withIconType(
+            juce::MessageBoxIconType::QuestionIcon
+        )
+        .withTitle(
+            "Modifications non enregistrees"
+        )
+        .withMessage(
+            "Le projet contient des modifications non enregistrees."
+        )
+        .withButton("Enregistrer")
+        .withButton("Ne pas enregistrer")
+        .withButton("Annuler");
+
+    juce::AlertWindow::showAsync(
+        options,
+        [safeThis, continuation](const int result)
+        {
+            if (safeThis == nullptr)
+                return;
+
+            if (result == 1)
+            {
+                safeThis->saveProjectWithCompletion(
+                    [safeThis, continuation](const bool success)
+                    {
+                        if (safeThis != nullptr
+                            && success
+                            && continuation)
+                        {
+                            continuation();
+                        }
+                    }
+                );
+            }
+            else if (result == 2)
+            {
+                if (continuation)
+                    continuation();
+            }
+        }
+    );
 }
 
 bool MainComponent::writeProjectFile(
@@ -641,6 +826,9 @@ bool MainComponent::writeProjectFile(
         return false;
 
     currentProjectFile = file;
+    lastSavedFingerprint =
+        makeSnapshotFingerprint(snapshot);
+    addRecentProject(file);
 
     if (previousAutosave.existsAsFile())
         previousAutosave.deleteFile();
@@ -878,7 +1066,12 @@ bool MainComponent::loadProjectFile(
     redoStack.clear();
 
     if (setAsCurrentProject)
+    {
         currentProjectFile = file;
+        lastSavedFingerprint =
+            makeSnapshotFingerprint(snapshot);
+        addRecentProject(file);
+    }
 
     lastAutosaveSerialisedState =
         juce::JSON::toString(
@@ -905,7 +1098,7 @@ juce::var MainComponent::serialiseSnapshot(
 
     root->setProperty("format", "SonoForgeProject");
     root->setProperty("formatVersion", 1);
-    root->setProperty("appVersion", "0.5.1");
+    root->setProperty("appVersion", "0.5.2");
     root->setProperty(
         "positionSeconds",
         snapshot.positionSeconds
@@ -1143,7 +1336,7 @@ juce::Result MainComponent::deserialiseSnapshot(
 
 void MainComponent::updateProjectTitle()
 {
-    auto text = juce::String("SonoForge Studio 0.5.1");
+    auto text = juce::String("SonoForge Studio 0.5.2");
 
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
@@ -1152,10 +1345,149 @@ void MainComponent::updateProjectTitle()
                 .getFileNameWithoutExtension();
     }
 
+    if (hasUnsavedChanges())
+        text += " *";
+
     titleLabel.setText(
         text,
         juce::dontSendNotification
     );
+}
+
+bool MainComponent::hasUnsavedChanges() const
+{
+    return makeSnapshotFingerprint(
+        captureSnapshot()
+    ) != lastSavedFingerprint;
+}
+
+juce::String MainComponent::makeSnapshotFingerprint(
+    const ProjectSnapshot& snapshot
+) const
+{
+    juce::String fingerprint;
+
+    fingerprint
+        << "bpm=" << juce::String(snapshot.bpm, 6)
+        << "|master=" << juce::String(snapshot.masterGain, 6)
+        << "|grid=" << juce::String(snapshot.gridId)
+        << "|snap=" << juce::String(snapshot.snapEnabled ? 1 : 0);
+
+    for (const auto& state : snapshot.tracks)
+    {
+        fingerprint
+            << "|file=" << state.sourceFile.getFullPathName()
+            << "|offset=" << juce::String(state.startOffsetSeconds, 9)
+            << "|sourceStart=" << juce::String(state.sourceStartSeconds, 9)
+            << "|sourceEnd=" << juce::String(state.sourceEndSeconds, 9)
+            << "|gain=" << juce::String(state.gain, 6)
+            << "|pan=" << juce::String(state.pan, 6)
+            << "|mute=" << juce::String(state.muted ? 1 : 0)
+            << "|solo=" << juce::String(state.solo ? 1 : 0);
+    }
+
+    return fingerprint;
+}
+
+void MainComponent::addRecentProject(
+    const juce::File& file
+)
+{
+    const auto path = file.getFullPathName();
+
+    if (path.isEmpty())
+        return;
+
+    recentProjectPaths.removeString(path);
+    recentProjectPaths.insert(0, path);
+
+    while (recentProjectPaths.size() > 8)
+        recentProjectPaths.remove(
+            recentProjectPaths.size() - 1
+        );
+
+    saveRecentProjects();
+    refreshRecentProjectsCombo();
+}
+
+void MainComponent::loadRecentProjects()
+{
+    recentProjectPaths.clear();
+
+    const auto file = getRecentProjectsFile();
+
+    if (file.existsAsFile())
+        file.readLines(recentProjectPaths);
+
+    for (int index = recentProjectPaths.size() - 1;
+         index >= 0;
+         --index)
+    {
+        if (! juce::File(
+                recentProjectPaths[index]
+            ).existsAsFile())
+        {
+            recentProjectPaths.remove(index);
+        }
+    }
+
+    while (recentProjectPaths.size() > 8)
+        recentProjectPaths.remove(
+            recentProjectPaths.size() - 1
+        );
+
+    saveRecentProjects();
+    refreshRecentProjectsCombo();
+}
+
+void MainComponent::saveRecentProjects() const
+{
+    const auto file = getRecentProjectsFile();
+    const auto parent = file.getParentDirectory();
+
+    if (! parent.exists())
+        parent.createDirectory();
+
+    juce::String content;
+
+    for (const auto& path : recentProjectPaths)
+        content += path + "\n";
+
+    file.replaceWithText(content);
+}
+
+void MainComponent::refreshRecentProjectsCombo()
+{
+    recentProjectsCombo.clear(
+        juce::dontSendNotification
+    );
+
+    for (int index = 0;
+         index < recentProjectPaths.size();
+         ++index)
+    {
+        const auto file =
+            juce::File(recentProjectPaths[index]);
+
+        recentProjectsCombo.addItem(
+            file.getFileNameWithoutExtension(),
+            index + 1
+        );
+    }
+
+    recentProjectsCombo.setSelectedId(
+        0,
+        juce::dontSendNotification
+    );
+}
+
+juce::File MainComponent::getRecentProjectsFile() const
+{
+    return juce::File::getSpecialLocation(
+        juce::File::userApplicationDataDirectory
+    )
+        .getChildFile("SonoForge")
+        .getChildFile("recent-projects.txt");
 }
 
 TrackRowComponent* MainComponent::addTrackRow(
@@ -1312,6 +1644,7 @@ void MainComponent::updateProjectState()
         audioEngine.getPositionSeconds()
     );
     updateHistoryButtons();
+    updateProjectTitle();
 }
 
 void MainComponent::seekTo(const double seconds)
@@ -1330,6 +1663,7 @@ void MainComponent::clipMoved()
     updateTimeline(
         audioEngine.getPositionSeconds()
     );
+    updateProjectTitle();
 }
 
 void MainComponent::selectRow(
@@ -1739,6 +2073,8 @@ void MainComponent::timerCallback()
     {
         lastAutosaveCheckMs = now;
         performAutosave();
+        updateProjectTitle();
+        updateRecoveryButton();
     }
 }
 

@@ -15,6 +15,9 @@ public:
 
     void paint(juce::Graphics& graphics) override;
     void resized() override;
+    void requestApplicationQuit(
+        std::function<void()> quitCallback
+    );
 
 private:
     struct ProjectSnapshot
@@ -31,8 +34,15 @@ private:
 
     void openAudioFiles();
     void openProject();
+    void openRecentProject(const juce::File& file);
     void saveProject();
+    void saveProjectWithCompletion(
+        std::function<void(bool)> completion
+    );
     void recoverAutosave();
+    void confirmSaveBeforeAction(
+        std::function<void()> continuation
+    );
     bool writeProjectFile(const juce::File& file);
     bool loadProjectFile(
         const juce::File& file,
@@ -59,6 +69,15 @@ private:
         juce::StringArray& missingFiles
     ) const;
     void updateProjectTitle();
+    [[nodiscard]] bool hasUnsavedChanges() const;
+    [[nodiscard]] juce::String makeSnapshotFingerprint(
+        const ProjectSnapshot& snapshot
+    ) const;
+    void addRecentProject(const juce::File& file);
+    void loadRecentProjects();
+    void saveRecentProjects() const;
+    void refreshRecentProjectsCombo();
+    [[nodiscard]] juce::File getRecentProjectsFile() const;
 
     TrackRowComponent* addTrackRow(AudioTrack& track);
     void rebuildTrackRowsFromEngine();
@@ -105,6 +124,7 @@ private:
     juce::TextButton saveProjectButton { "Enregistrer" };
     juce::TextButton recoverButton { "Recuperer" };
     juce::TextButton openButton { "Importer pistes" };
+    juce::ComboBox recentProjectsCombo;
     juce::TextButton undoButton { "Annuler" };
     juce::TextButton redoButton { "Retablir" };
     juce::TextButton duplicateButton { "Dupliquer" };
@@ -135,9 +155,11 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<juce::FileChooser> projectFileChooser;
     juce::File currentProjectFile;
+    juce::StringArray recentProjectPaths;
 
     double lastAutosaveCheckMs = 0.0;
     juce::String lastAutosaveSerialisedState;
+    juce::String lastSavedFingerprint;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };
