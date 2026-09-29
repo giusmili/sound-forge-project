@@ -37,6 +37,7 @@ void MidiInstrumentTrack::getNextAudioBlock(
 
     if (muted.load())
     {
+        peakLevel.store(0.0f);
         bufferToFill.clearActiveBufferRegion();
         return;
     }
@@ -52,6 +53,26 @@ void MidiInstrumentTrack::getNextAudioBlock(
         bufferToFill.startSample,
         bufferToFill.numSamples,
         juce::jlimit(0.0f, 1.5f, gain.load())
+    );
+
+    float peak = 0.0f;
+
+    for (int channel = 0;
+         channel < bufferToFill.buffer->getNumChannels();
+         ++channel)
+    {
+        peak = juce::jmax(
+            peak,
+            bufferToFill.buffer->getMagnitude(
+                channel,
+                bufferToFill.startSample,
+                bufferToFill.numSamples
+            )
+        );
+    }
+
+    peakLevel.store(
+        juce::jlimit(0.0f, 1.5f, peak)
     );
 }
 
@@ -109,6 +130,11 @@ void MidiInstrumentTrack::setMuted(
 float MidiInstrumentTrack::getGain() const noexcept
 {
     return gain.load();
+}
+
+float MidiInstrumentTrack::getPeakLevel() const noexcept
+{
+    return peakLevel.load();
 }
 
 bool MidiInstrumentTrack::isMuted() const noexcept

@@ -636,6 +636,20 @@ void TrackRowComponent::setSnapSettings(
     repaint();
 }
 
+void TrackRowComponent::syncControlsFromTrack()
+{
+    volumeSlider.setValue(
+        track.getGain(),
+        juce::dontSendNotification
+    );
+    panSlider.setValue(
+        track.getPan(),
+        juce::dontSendNotification
+    );
+    refreshMuteButton();
+    refreshSoloButton();
+}
+
 void TrackRowComponent::setSelected(
     const bool shouldBeSelected
 )

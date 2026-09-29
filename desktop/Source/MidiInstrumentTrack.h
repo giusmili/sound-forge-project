@@ -27,6 +27,7 @@ public:
     void setMuted(bool shouldBeMuted);
 
     [[nodiscard]] float getGain() const noexcept;
+    [[nodiscard]] float getPeakLevel() const noexcept;
     [[nodiscard]] bool isMuted() const noexcept;
     [[nodiscard]] const juce::String& getName() const noexcept;
     [[nodiscard]] int getInstrumentId() const noexcept;
@@ -88,6 +89,7 @@ private:
     juce::MidiBuffer emptyMidiBuffer;
 
     std::atomic<float> gain { 0.8f };
+    std::atomic<float> peakLevel { 0.0f };
     std::atomic<bool> muted { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(

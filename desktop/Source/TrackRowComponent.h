@@ -40,6 +40,7 @@ public:
     );
 
     void setSelected(bool shouldBeSelected);
+    void syncControlsFromTrack();
 
     [[nodiscard]] bool isSelected() const noexcept;
     [[nodiscard]] AudioTrack& getTrack() noexcept;

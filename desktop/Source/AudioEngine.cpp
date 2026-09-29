@@ -153,6 +153,26 @@ void AudioEngine::getNextAudioBlock(
         juce::jlimit(0.0f, 1.0f, masterGain.load())
     );
 
+    float masterPeak = 0.0f;
+
+    for (int channel = 0;
+         channel < bufferToFill.buffer->getNumChannels();
+         ++channel)
+    {
+        masterPeak = juce::jmax(
+            masterPeak,
+            bufferToFill.buffer->getMagnitude(
+                channel,
+                bufferToFill.startSample,
+                bufferToFill.numSamples
+            )
+        );
+    }
+
+    masterPeakLevel.store(
+        juce::jlimit(0.0f, 1.5f, masterPeak)
+    );
+
     if (! projectPlaying)
         return;
 
@@ -821,6 +841,16 @@ void AudioEngine::setMasterGain(const float gain)
     masterGain.store(
         juce::jlimit(0.0f, 1.0f, gain)
     );
+}
+
+float AudioEngine::getMasterGain() const noexcept
+{
+    return masterGain.load();
+}
+
+float AudioEngine::getMasterPeakLevel() const noexcept
+{
+    return masterPeakLevel.load();
 }
 
 void AudioEngine::refreshSoloState()

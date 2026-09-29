@@ -35,7 +35,7 @@ MainComponent::MainComponent()
     addAndMakeVisible(menuBar);
 
     titleLabel.setText(
-        "SonoForge Studio 0.7",
+        "SonoForge Studio 0.8",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -104,6 +104,7 @@ MainComponent::MainComponent()
              &stopButton,
              &recordButton,
              &audioSettingsButton,
+             &mixerButton,
              &snapButton
          })
     {
@@ -233,6 +234,31 @@ MainComponent::MainComponent()
     trackViewport.setScrollBarsShown(true, false);
     addAndMakeVisible(trackViewport);
 
+    mixerButton.setClickingTogglesState(true);
+    mixerButton.setColour(
+        juce::TextButton::buttonOnColourId,
+        juce::Colour(accentColour)
+    );
+
+    mixerPanel.onChanged = [this]
+    {
+        masterSlider.setValue(
+            audioEngine.getMasterGain(),
+            juce::dontSendNotification
+        );
+
+        for (auto* row : trackRows)
+            row->syncControlsFromTrack();
+
+        for (auto* row : midiTrackRows)
+            row->syncControlsFromTrack();
+
+        updateProjectTitle();
+    };
+
+    mixerPanel.setVisible(false);
+    addAndMakeVisible(mixerPanel);
+
     openProjectButton.onClick = [this]
     {
         openProject();
@@ -327,6 +353,19 @@ MainComponent::MainComponent()
     audioSettingsButton.onClick = [this]
     {
         showAudioSettings();
+    };
+
+    mixerButton.onClick = [this]
+    {
+        mixerVisible =
+            mixerButton.getToggleState();
+
+        mixerPanel.setVisible(mixerVisible);
+
+        if (mixerVisible)
+            mixerPanel.syncWithEngine();
+
+        resized();
     };
 
     snapButton.onClick = [this]
@@ -543,6 +582,10 @@ void MainComponent::resized()
         viewRow.removeFromLeft(240).reduced(3)
     );
 
+    mixerButton.setBounds(
+        viewRow.removeFromRight(96).reduced(3)
+    );
+
     area.removeFromTop(6);
 
     timelineRuler.setBounds(
@@ -550,6 +593,18 @@ void MainComponent::resized()
     );
 
     area.removeFromTop(2);
+
+    if (mixerVisible)
+    {
+        auto mixerArea =
+            area.removeFromBottom(
+                juce::jmin(270, area.getHeight() / 2)
+            );
+
+        area.removeFromBottom(6);
+        mixerPanel.setBounds(mixerArea);
+    }
+
     trackViewport.setBounds(area);
 
     layoutTracks();
@@ -1293,7 +1348,7 @@ juce::var MainComponent::serialiseSnapshot(
 
     root->setProperty("format", "SonoForgeProject");
     root->setProperty("formatVersion", 2);
-    root->setProperty("appVersion", "0.7.0");
+    root->setProperty("appVersion", "0.8.0");
     root->setProperty(
         "positionSeconds",
         snapshot.positionSeconds
@@ -1609,7 +1664,7 @@ juce::Result MainComponent::deserialiseSnapshot(
 
 void MainComponent::updateProjectTitle()
 {
-    auto text = juce::String("SonoForge Studio 0.7");
+    auto text = juce::String("SonoForge Studio 0.8");
 
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
@@ -2005,6 +2060,7 @@ void MainComponent::updateProjectState()
     }
 
     layoutTracks();
+    mixerPanel.syncWithEngine();
     updateTimeline(
         audioEngine.getPositionSeconds()
     );

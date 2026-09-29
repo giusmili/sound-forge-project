@@ -95,6 +95,8 @@ public:
     void stop();
     void setPositionSeconds(double seconds);
     void setMasterGain(float gain);
+    [[nodiscard]] float getMasterGain() const noexcept;
+    [[nodiscard]] float getMasterPeakLevel() const noexcept;
     void refreshSoloState();
     void refreshTrackAlignment();
 
@@ -121,6 +123,7 @@ private:
     mutable juce::CriticalSection trackLock;
 
     std::atomic<float> masterGain { 0.8f };
+    std::atomic<float> masterPeakLevel { 0.0f };
     std::atomic<double> projectPositionSeconds { 0.0 };
     std::atomic<double> outputSampleRate { 44100.0 };
     std::atomic<bool> playing { false };

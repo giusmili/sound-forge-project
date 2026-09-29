@@ -19,6 +19,7 @@ public:
     void resized() override;
 
     [[nodiscard]] MidiInstrumentTrack& getTrack() noexcept;
+    void syncControlsFromTrack();
 
     std::function<void()> onChanged;
     std::function<void(MidiTrackRowComponent*)>

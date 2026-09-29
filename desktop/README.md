@@ -1,6 +1,31 @@
-# SonoForge Studio Desktop 0.7
+# SonoForge Studio Desktop 0.8
 
-Cette iteration integre les premiers retours de test utilisateur sur l'ergonomie generale et les types de pistes.
+Cette iteration ajoute un mixer leger integre tout en conservant les fonctions d'ergonomie, de pistes audio et de pistes MIDI / Instrument de la version precedente.
+
+## Mixer leger
+
+Le bouton Mixer affiche ou masque une console compacte en bas de la fenetre.
+
+Chaque piste audio dispose d'une tranche avec :
+
+- nom de piste
+- vumetre temps reel
+- fader de volume vertical
+- panoramique
+- Mute
+- Solo
+
+Chaque piste MIDI / Instrument dispose d'une tranche avec :
+
+- nom de piste
+- vumetre temps reel
+- fader de volume vertical
+- Mute
+- indication Basic Synth
+
+Une tranche Master affiche le niveau de sortie et controle le gain general.
+
+Les reglages du mixer et ceux des lignes de pistes pilotent les memes objets audio. Une modification faite dans le mixer est donc immediatement appliquee au moteur audio et synchronisee avec l'interface principale.
 
 ## Fermeture et menus
 
@@ -75,7 +100,7 @@ Les nouveaux projets utilisent :
 ```text
 SonoForgeProject
 formatVersion = 2
-appVersion = 0.7.0
+appVersion = 0.8.0
 ```
 
 Le formatVersion 2 ajoute les pistes MIDI / Instrument.
@@ -99,7 +124,8 @@ Les projets formatVersion 1 restent compatibles en lecture.
 - waveforms
 - zoom et navigation
 - volume / pan / Mute / Solo
-- Master
+- mixer leger escamotable avec vumetres
+- Master avec vumetre
 - piste MIDI / Instrument avec Basic Synth
 
 ## Prochaine iteration MIDI

@@ -51,6 +51,7 @@ void AudioTrack::getNextAudioBlock(
 
     if (muted.load() || soloMuted.load())
     {
+        peakLevel.store(0.0f);
         bufferToFill.clearActiveBufferRegion();
         return;
     }
@@ -97,6 +98,26 @@ void AudioTrack::getNextAudioBlock(
             currentGain
         );
     }
+
+    float peak = 0.0f;
+
+    for (int channel = 0;
+         channel < bufferToFill.buffer->getNumChannels();
+         ++channel)
+    {
+        peak = juce::jmax(
+            peak,
+            bufferToFill.buffer->getMagnitude(
+                channel,
+                bufferToFill.startSample,
+                bufferToFill.numSamples
+            )
+        );
+    }
+
+    peakLevel.store(
+        juce::jlimit(0.0f, 1.5f, peak)
+    );
 }
 
 void AudioTrack::syncToProjectPosition(
@@ -209,6 +230,11 @@ float AudioTrack::getGain() const noexcept
 float AudioTrack::getPan() const noexcept
 {
     return pan.load();
+}
+
+float AudioTrack::getPeakLevel() const noexcept
+{
+    return peakLevel.load();
 }
 
 bool AudioTrack::isMuted() const noexcept
