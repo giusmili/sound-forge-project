@@ -149,6 +149,11 @@ MixerComponent::MixerComponent()
     };
     addAndMakeVisible(masterSlider);
 
+    masterDbLabel.setJustificationType(juce::Justification::centred);
+    masterDbLabel.setColour(juce::Label::textColourId, juce::Colour(textColour));
+    masterDbLabel.setText("-inf dBFS", juce::dontSendNotification);
+    addAndMakeVisible(masterDbLabel);
+
     viewport.setViewedComponent(&channelContainer, false);
     viewport.setScrollBarsShown(false, true);
     addAndMakeVisible(viewport);
@@ -158,6 +163,32 @@ void MixerComponent::paint(juce::Graphics& graphics)
 {
     graphics.setColour(juce::Colour(backgroundColour));
     graphics.fillRoundedRectangle(getLocalBounds().toFloat(), 7.0f);
+
+    auto meter = getLocalBounds().reduced(8).removeFromRight(94).withTrimmedTop(52).withTrimmedBottom(52).removeFromRight(20);
+    auto left = meter.removeFromLeft(8);
+    meter.removeFromLeft(3);
+    auto right = meter.removeFromLeft(8);
+    graphics.setColour(juce::Colour(0xff0b0d10));
+    graphics.fillRect(left);
+    graphics.fillRect(right);
+    const auto draw = [&graphics](juce::Rectangle<int> bar, const float level)
+    {
+        const auto normalized = juce::jlimit(0.0f, 1.0f, level);
+        const auto height = static_cast<int>(normalized * static_cast<float>(bar.getHeight()));
+        auto lit = bar.removeFromBottom(height);
+        graphics.setColour(normalized > 0.98f ? juce::Colour(0xffe35d5d) : (normalized > 0.75f ? juce::Colour(0xffe0b84f) : juce::Colour(0xff55c878)));
+        graphics.fillRect(lit);
+    };
+    draw(left, masterPeakLeft);
+    draw(right, masterPeakRight);
+
+    if (clipHoldFrames > 0)
+    {
+        graphics.setColour(juce::Colour(0xffe35d5d));
+        graphics.fillRoundedRectangle(getLocalBounds().reduced(8).removeFromRight(94).removeFromTop(20).toFloat(), 3.0f);
+        graphics.setColour(juce::Colours::white);
+        graphics.drawFittedText("CLIP", getLocalBounds().reduced(8).removeFromRight(94).removeFromTop(20), juce::Justification::centred, 1);
+    }
 }
 
 void MixerComponent::resized()
@@ -167,6 +198,7 @@ void MixerComponent::resized()
 
     auto masterArea = area.removeFromRight(100);
     masterLabel.setBounds(masterArea.removeFromTop(24));
+    masterDbLabel.setBounds(masterArea.removeFromBottom(24));
     masterSlider.setBounds(masterArea.reduced(8, 2));
 
     area.removeFromRight(6);
@@ -199,6 +231,22 @@ void MixerComponent::refresh()
 {
     for (auto* channel : channels)
         channel->refreshFromTrack();
+}
+
+void MixerComponent::setMasterLevels(const float left, const float right)
+{
+    masterPeakLeft = juce::jmax(left, masterPeakLeft * 0.84f);
+    masterPeakRight = juce::jmax(right, masterPeakRight * 0.84f);
+
+    if (left >= 1.0f || right >= 1.0f)
+        clipHoldFrames = 60;
+    else if (clipHoldFrames > 0)
+        --clipHoldFrames;
+
+    const auto peak = juce::jmax(masterPeakLeft, masterPeakRight);
+    const auto db = peak > 0.000001f ? juce::Decibels::gainToDecibels(peak) : -100.0f;
+    masterDbLabel.setText(db <= -99.0f ? "-inf dBFS" : juce::String(db, 1) + " dBFS", juce::dontSendNotification);
+    repaint();
 }
 
 void MixerComponent::setMasterGain(const float gain)
