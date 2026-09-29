@@ -47,6 +47,7 @@ public:
     std::function<void(double)> onSeek;
     std::function<void()> onSoloChanged;
     std::function<void()> onClipMoved;
+    std::function<void()> onEditBegin;
     std::function<void(TrackRowComponent*)> onSelectionRequested;
 
 private:
@@ -81,6 +82,7 @@ private:
     double snapInterval = 1.0;
 
     bool selected = false;
+    bool editSnapshotSent = false;
     DragMode dragMode = DragMode::none;
     float dragStartX = 0.0f;
     double dragStartOffset = 0.0;
