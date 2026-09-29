@@ -590,7 +590,7 @@ bool MainComponent::writeProjectFile(
         serialiseSnapshot(captureSnapshot(), file);
 
     const auto json =
-        juce::JSON::toString(data, true);
+        juce::JSON::toString(data, false);
 
     if (! file.replaceWithText(json))
     {
@@ -651,7 +651,7 @@ bool MainComponent::loadProjectFile(
 
     if (! missingFiles.isEmpty())
     {
-        auto message =
+        juce::String message =
             "Les fichiers audio suivants sont introuvables :\n\n";
 
         const auto visibleCount =
