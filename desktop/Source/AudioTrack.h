@@ -6,6 +6,7 @@ class AudioTrack final : public juce::AudioSource
 {
 public:
     AudioTrack(
+        juce::File sourceFile,
         juce::String trackName,
         std::unique_ptr<juce::AudioFormatReaderSource> source,
         double sourceSampleRate
@@ -19,6 +20,7 @@ public:
 
     void play();
     void stop();
+    void setPositionSeconds(double seconds);
 
     void setGain(float newGain);
     void setPan(float newPan);
@@ -31,8 +33,10 @@ public:
     [[nodiscard]] double getPositionSeconds() const;
     [[nodiscard]] double getLengthSeconds() const;
     [[nodiscard]] const juce::String& getName() const noexcept;
+    [[nodiscard]] const juce::File& getSourceFile() const noexcept;
 
 private:
+    juce::File file;
     juce::String name;
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
     juce::AudioTransportSource transport;

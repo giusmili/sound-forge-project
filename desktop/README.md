@@ -1,37 +1,52 @@
 # SonoForge Studio Desktop
 
-Base native du projet SonoForge Studio.
+SonoForge Studio est maintenant dans la phase 0.2B du moteur natif.
 
-## Etat actuel
-
-La branche de developpement 0.2 ajoute un premier moteur multipiste au socle 0.1 :
+## Fonctionnalites actuelles
 
 - application native C++20 / JUCE 9.0.2
-- sortie audio Windows
-- import de plusieurs fichiers WAV, AIFF, FLAC, OGG et MP3
-- lecture simultanee de plusieurs pistes
-- volume individuel jusqu'a +3.5 dB environ
-- panoramique gauche / droite
+- lecture multipiste
+- import de plusieurs fichiers audio
+- volume et panoramique par piste
 - mute par piste
 - volume Master
-- transport Play / Stop
-- compteur temporel
 - configuration du peripherique audio
+- timeline commune
+- regle temporelle
+- playhead synchronise
+- formes d'onde generees par JUCE AudioThumbnail
+- longueur graphique des clips proportionnelle a leur duree
+- clic dans la regle ou dans une piste pour deplacer le playhead
 
-La prochaine sous-etape ajoutera la representation graphique des clips et des waveforms.
+## Architecture
+
+```text
+MainComponent
+    |
+    +-- TimelineRulerComponent
+    |
+    +-- TrackRowComponent N
+    |       |
+    |       +-- AudioThumbnail
+    |
+    v
+AudioEngine
+    |
+    +-- MixerAudioSource
+            |
+            +-- AudioTrack 1
+            +-- AudioTrack 2
+            +-- AudioTrack N
+```
 
 ## Prerequis Windows
 
 - Windows 11
-- Visual Studio 2022 avec le workload Desktop development with C++
+- Visual Studio 2022 avec Desktop development with C++
 - CMake 3.22 ou plus recent
 - Git
 
-JUCE 9.0.2 est recupere automatiquement par CMake avec FetchContent.
-
 ## Configuration
-
-Depuis la racine du depot :
 
 ```powershell
 cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
@@ -43,22 +58,15 @@ cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release --parallel
 ```
 
-## Architecture en cours
+## Etapes suivantes
 
-```text
-MainComponent
-    |
-    v
-AudioEngine
-    |
-    +-- MixerAudioSource
-          |
-          +-- AudioTrack 1
-          +-- AudioTrack 2
-          +-- AudioTrack N
-```
-
-Chaque piste possede son propre transport et ses propres reglages. Le moteur melange les pistes avant d'appliquer le gain Master.
+- deplacement des clips dans le temps
+- redimensionnement non destructif
+- zoom horizontal
+- Solo
+- pause
+- sauvegarde du projet
+- enregistrement audio
 
 ## Licence JUCE
 

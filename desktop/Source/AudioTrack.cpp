@@ -1,11 +1,13 @@
 #include "AudioTrack.h"
 
 AudioTrack::AudioTrack(
+    juce::File sourceFile,
     juce::String trackName,
     std::unique_ptr<juce::AudioFormatReaderSource> source,
     const double sourceSampleRate
 )
-    : name(std::move(trackName)),
+    : file(std::move(sourceFile)),
+      name(std::move(trackName)),
       readerSource(std::move(source))
 {
     transport.setSource(
@@ -93,19 +95,24 @@ void AudioTrack::getNextAudioBlock(
 
 void AudioTrack::play()
 {
-    if (getLengthSeconds() <= 0.0)
-        return;
-
-    if (transport.getCurrentPosition() >= getLengthSeconds())
-        transport.setPosition(0.0);
-
-    transport.start();
+    if (getLengthSeconds() > 0.0
+        && getPositionSeconds() < getLengthSeconds())
+    {
+        transport.start();
+    }
 }
 
 void AudioTrack::stop()
 {
     transport.stop();
     transport.setPosition(0.0);
+}
+
+void AudioTrack::setPositionSeconds(const double seconds)
+{
+    transport.setPosition(
+        juce::jlimit(0.0, getLengthSeconds(), seconds)
+    );
 }
 
 void AudioTrack::setGain(const float newGain)
@@ -156,4 +163,9 @@ double AudioTrack::getLengthSeconds() const
 const juce::String& AudioTrack::getName() const noexcept
 {
     return name;
+}
+
+const juce::File& AudioTrack::getSourceFile() const noexcept
+{
+    return file;
 }

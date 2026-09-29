@@ -21,6 +21,7 @@ public:
 
     void play();
     void stop();
+    void setPositionSeconds(double seconds);
     void setMasterGain(float gain);
 
     [[nodiscard]] bool isPlaying() const;
@@ -29,9 +30,12 @@ public:
     [[nodiscard]] int getTrackCount() const noexcept;
 
     juce::AudioDeviceManager& getDeviceManager() noexcept;
+    juce::AudioFormatManager& getFormatManager() noexcept;
+    juce::AudioThumbnailCache& getThumbnailCache() noexcept;
 
 private:
     juce::AudioFormatManager formatManager;
+    juce::AudioThumbnailCache thumbnailCache { 64 };
     juce::MixerAudioSource mixer;
     std::vector<std::unique_ptr<AudioTrack>> tracks;
 

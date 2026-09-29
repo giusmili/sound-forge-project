@@ -76,6 +76,7 @@ juce::Result AudioEngine::addTrackFromFile(
     );
 
     auto track = std::make_unique<AudioTrack>(
+        file,
         file.getFileNameWithoutExtension(),
         std::move(readerSource),
         sourceSampleRate
@@ -91,6 +92,14 @@ juce::Result AudioEngine::addTrackFromFile(
 
 void AudioEngine::play()
 {
+    const auto length = getLengthSeconds();
+
+    if (length <= 0.0)
+        return;
+
+    if (getPositionSeconds() >= length - 0.001)
+        setPositionSeconds(0.0);
+
     for (auto& track : tracks)
         track->play();
 }
@@ -99,6 +108,18 @@ void AudioEngine::stop()
 {
     for (auto& track : tracks)
         track->stop();
+}
+
+void AudioEngine::setPositionSeconds(const double seconds)
+{
+    const auto position = juce::jlimit(
+        0.0,
+        getLengthSeconds(),
+        seconds
+    );
+
+    for (auto& track : tracks)
+        track->setPositionSeconds(position);
 }
 
 void AudioEngine::setMasterGain(const float gain)
@@ -145,4 +166,14 @@ int AudioEngine::getTrackCount() const noexcept
 juce::AudioDeviceManager& AudioEngine::getDeviceManager() noexcept
 {
     return deviceManager;
+}
+
+juce::AudioFormatManager& AudioEngine::getFormatManager() noexcept
+{
+    return formatManager;
+}
+
+juce::AudioThumbnailCache& AudioEngine::getThumbnailCache() noexcept
+{
+    return thumbnailCache;
 }
