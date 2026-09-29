@@ -67,7 +67,8 @@ MainComponent::MainComponent()
              &playButton,
              &pauseButton,
              &stopButton,
-             &audioSettingsButton
+             &audioSettingsButton,
+             &mixerButton
          })
     {
         button->setColour(
@@ -112,6 +113,17 @@ MainComponent::MainComponent()
     trackViewport.setScrollBarsShown(true, false);
     addAndMakeVisible(trackViewport);
 
+    mixer.onMasterGainChanged = [this](const float gain)
+    {
+        masterSlider.setValue(gain, juce::dontSendNotification);
+        audioEngine.setMasterGain(gain);
+    };
+    mixer.onSoloChanged = [this]
+    {
+        audioEngine.refreshSoloState();
+    };
+    addAndMakeVisible(mixer);
+
     openButton.onClick = [this]
     {
         openAudioFiles();
@@ -141,11 +153,18 @@ MainComponent::MainComponent()
         showAudioSettings();
     };
 
+    mixerButton.onClick = [this]
+    {
+        mixerVisible = ! mixerVisible;
+        mixer.setVisible(mixerVisible);
+        resized();
+    };
+
     masterSlider.onValueChange = [this]
     {
-        audioEngine.setMasterGain(
-            static_cast<float>(masterSlider.getValue())
-        );
+        const auto gain = static_cast<float>(masterSlider.getValue());
+        audioEngine.setMasterGain(gain);
+        mixer.setMasterGain(gain);
     };
 
     audioEngine.setMasterGain(
@@ -179,6 +198,9 @@ void MainComponent::resized()
         header.removeFromLeft(340)
     );
     audioSettingsButton.setBounds(
+        header.removeFromRight(100).reduced(4)
+    );
+    mixerButton.setBounds(
         header.removeFromRight(100).reduced(4)
     );
 
@@ -225,6 +247,18 @@ void MainComponent::resized()
     );
 
     area.removeFromTop(2);
+
+    if (mixerVisible)
+    {
+        auto mixerArea = area.removeFromBottom(260);
+        area.removeFromBottom(8);
+        mixer.setBounds(mixerArea);
+    }
+    else
+    {
+        mixer.setBounds({});
+    }
+
     trackViewport.setBounds(area);
 
     layoutTracks();
@@ -325,6 +359,7 @@ void MainComponent::addTrackRow(AudioTrack& track)
     };
 
     trackList.addAndMakeVisible(row);
+    mixer.addTrack(track);
     layoutTracks();
 }
 
@@ -420,6 +455,7 @@ void MainComponent::timerCallback()
         audioEngine.getPositionSeconds();
 
     updateTimeline(current);
+    mixer.refresh();
     pauseButton.setEnabled(audioEngine.isPlaying());
 }
 
