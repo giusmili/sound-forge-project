@@ -19,7 +19,7 @@ MainComponent::MainComponent()
     setSize(1320, 820);
 
     titleLabel.setText(
-        "SonoForge Studio 0.4.1",
+        "SonoForge Studio 0.4.2",
         juce::dontSendNotification
     );
     titleLabel.setFont(

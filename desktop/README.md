@@ -1,6 +1,6 @@
-# SonoForge Studio Desktop 0.4.1
+# SonoForge Studio Desktop 0.4.2
 
-Cette iteration ajoute le decoupage non destructif au playhead.
+Cette iteration ajoute le trim non destructif gauche/droite en plus du Split au playhead.\n\n## Trim non destructif\n\nSelectionnez un clip puis faites glisser son bord gauche ou droit. Les poignees jaunes indiquent les zones de trim. Le curseur change pour signaler le redimensionnement.\n\nLe bord gauche modifie simultanement sourceStart et startOffset afin de garder la fin du clip en place. Le bord droit modifie sourceEnd. Le snapping 1/4, 1/8 ou 1/16 reste applicable pendant le trim.\n\nLe fichier audio original n'est jamais modifie.
 
 ## Split au playhead
 
