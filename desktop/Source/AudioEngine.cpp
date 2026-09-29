@@ -293,6 +293,122 @@ bool AudioEngine::removeTrack(AudioTrack* trackToRemove)
     return true;
 }
 
+std::vector<AudioEngine::TrackState>
+AudioEngine::captureTrackStates() const
+{
+    const juce::ScopedLock lock(trackLock);
+
+    std::vector<TrackState> states;
+    states.reserve(tracks.size());
+
+    for (const auto& track : tracks)
+    {
+        TrackState state;
+        state.sourceFile = track->getSourceFile();
+        state.startOffsetSeconds = track->getStartOffsetSeconds();
+        state.sourceStartSeconds = track->getSourceStartSeconds();
+        state.sourceEndSeconds = track->getSourceEndSeconds();
+        state.gain = track->getGain();
+        state.pan = track->getPan();
+        state.muted = track->isMuted();
+        state.solo = track->isSolo();
+
+        states.push_back(std::move(state));
+    }
+
+    return states;
+}
+
+juce::Result AudioEngine::restoreTrackStates(
+    const std::vector<TrackState>& states
+)
+{
+    std::vector<std::unique_ptr<AudioTrack>> rebuiltTracks;
+    rebuiltTracks.reserve(states.size());
+
+    for (const auto& state : states)
+    {
+        std::unique_ptr<juce::AudioFormatReader> reader(
+            formatManager.createReaderFor(state.sourceFile)
+        );
+
+        if (reader == nullptr)
+        {
+            return juce::Result::fail(
+                "Impossible de restaurer le fichier audio : "
+                + state.sourceFile.getFullPathName()
+            );
+        }
+
+        const auto sourceSampleRate = reader->sampleRate;
+
+        auto readerSource =
+            std::make_unique<juce::AudioFormatReaderSource>(
+                reader.release(),
+                true
+            );
+
+        auto track = std::make_unique<AudioTrack>(
+            state.sourceFile,
+            state.sourceFile.getFileNameWithoutExtension(),
+            std::move(readerSource),
+            sourceSampleRate
+        );
+
+        track->setStartOffsetSeconds(
+            state.startOffsetSeconds
+        );
+        track->setSourceRange(
+            state.sourceStartSeconds,
+            state.sourceEndSeconds
+        );
+        track->setGain(state.gain);
+        track->setPan(state.pan);
+        track->setMuted(state.muted);
+        track->setSolo(state.solo);
+
+        rebuiltTracks.push_back(std::move(track));
+    }
+
+    const juce::ScopedLock lock(trackLock);
+
+    playing.store(false);
+    mixer.removeAllInputs();
+    tracks.clear();
+
+    tracks = std::move(rebuiltTracks);
+
+    for (auto& track : tracks)
+        mixer.addInputSource(track.get(), false);
+
+    refreshSoloStateUnlocked();
+
+    const auto length = getLengthSecondsUnlocked();
+    const auto position = juce::jlimit(
+        0.0,
+        length,
+        projectPositionSeconds.load()
+    );
+
+    projectPositionSeconds.store(position);
+    syncTracksUnlocked(position, false);
+
+    return juce::Result::ok();
+}
+
+std::vector<AudioTrack*> AudioEngine::getTrackPointers() const
+{
+    const juce::ScopedLock lock(trackLock);
+
+    std::vector<AudioTrack*> result;
+    result.reserve(tracks.size());
+
+    for (const auto& track : tracks)
+        result.push_back(track.get());
+
+    return result;
+}
+
 void AudioEngine::play()
 {
     const juce::ScopedLock lock(trackLock);

@@ -11,6 +11,7 @@ constexpr auto textColour = 0xffe8edf3;
 constexpr auto snapColour = 0xff3d8f68;
 constexpr int trackRowHeight = 112;
 constexpr double minimumSplitMarginSeconds = 0.01;
+constexpr auto maxHistoryEntries = 50U;
 }
 
 MainComponent::MainComponent()
@@ -19,7 +20,7 @@ MainComponent::MainComponent()
     setSize(1320, 820);
 
     titleLabel.setText(
-        "SonoForge Studio 0.4.2",
+        "SonoForge Studio 0.4.3",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -73,6 +74,8 @@ MainComponent::MainComponent()
 
     for (auto* button : {
              &openButton,
+             &undoButton,
+             &redoButton,
              &duplicateButton,
              &splitButton,
              &deleteButton,
@@ -182,6 +185,16 @@ MainComponent::MainComponent()
     openButton.onClick = [this]
     {
         openAudioFiles();
+    };
+
+    undoButton.onClick = [this]
+    {
+        undo();
+    };
+
+    redoButton.onClick = [this]
+    {
+        redo();
     };
 
     duplicateButton.onClick = [this]
@@ -312,6 +325,13 @@ void MainComponent::resized()
         importRow.removeFromLeft(120)
     );
     importRow.removeFromLeft(8);
+    undoButton.setBounds(
+        importRow.removeFromLeft(86).reduced(4)
+    );
+    redoButton.setBounds(
+        importRow.removeFromLeft(86).reduced(4)
+    );
+    importRow.removeFromLeft(8);
     duplicateButton.setBounds(
         importRow.removeFromLeft(110).reduced(4)
     );
@@ -424,6 +444,10 @@ void MainComponent::openAudioFiles()
 
             const auto files = chooser.getResults();
 
+            const auto before =
+                safeThis->captureSnapshot();
+
+            bool projectChanged = false;
             TrackRowComponent* lastAdded = nullptr;
 
             for (const auto& file : files)
@@ -444,6 +468,7 @@ void MainComponent::openAudioFiles()
                 {
                     lastAdded =
                         safeThis->addTrackRow(*createdTrack);
+                    projectChanged = true;
                 }
                 else
                 {
@@ -459,6 +484,9 @@ void MainComponent::openAudioFiles()
 
             if (lastAdded != nullptr)
                 safeThis->selectRow(lastAdded);
+
+            if (projectChanged)
+                safeThis->pushUndoSnapshot(before);
 
             safeThis->updateProjectState();
         }
@@ -490,6 +518,11 @@ TrackRowComponent* MainComponent::addTrackRow(
     row->onClipMoved = [this]
     {
         clipMoved();
+    };
+
+    row->onEditBegin = [this]
+    {
+        pushUndoSnapshot(captureSnapshot());
     };
 
     row->onSelectionRequested =
@@ -613,6 +646,7 @@ void MainComponent::updateProjectState()
     updateTimeline(
         audioEngine.getPositionSeconds()
     );
+    updateHistoryButtons();
 }
 
 void MainComponent::seekTo(const double seconds)
@@ -656,6 +690,8 @@ void MainComponent::duplicateSelectedClip()
     if (selectedRow == nullptr)
         return;
 
+    const auto before = captureSnapshot();
+
     AudioTrack* createdTrack = nullptr;
 
     const auto result = audioEngine.duplicateTrack(
@@ -683,6 +719,7 @@ void MainComponent::duplicateSelectedClip()
     auto* newRow = addTrackRow(*createdTrack);
     selectRow(newRow);
 
+    pushUndoSnapshot(before);
     updateProjectState();
 }
 
@@ -690,6 +727,8 @@ void MainComponent::splitSelectedClip()
 {
     if (selectedRow == nullptr)
         return;
+
+    const auto before = captureSnapshot();
 
     AudioTrack* rightTrack = nullptr;
 
@@ -713,6 +752,7 @@ void MainComponent::splitSelectedClip()
     auto* rightRow = addTrackRow(*rightTrack);
     selectRow(rightRow);
 
+    pushUndoSnapshot(before);
     updateProjectState();
 }
 
@@ -721,6 +761,8 @@ void MainComponent::deleteSelectedClip()
     if (selectedRow == nullptr)
         return;
 
+    const auto before = captureSnapshot();
+
     auto* rowToDelete = selectedRow;
     auto* trackToDelete = &selectedRow->getTrack();
 
@@ -728,7 +770,7 @@ void MainComponent::deleteSelectedClip()
         juce::Component::SafePointer<MainComponent>(this);
 
     juce::MessageManager::callAsync(
-        [safeThis, rowToDelete, trackToDelete]
+        [safeThis, rowToDelete, trackToDelete, before]
         {
             if (safeThis == nullptr)
                 return;
@@ -739,13 +781,163 @@ void MainComponent::deleteSelectedClip()
                 true
             );
 
-            safeThis->audioEngine.removeTrack(
-                trackToDelete
-            );
+            const auto removed =
+                safeThis->audioEngine.removeTrack(
+                    trackToDelete
+                );
+
+            if (removed)
+                safeThis->pushUndoSnapshot(before);
 
             safeThis->updateProjectState();
         }
     );
+}
+
+void MainComponent::rebuildTrackRowsFromEngine()
+{
+    selectedRow = nullptr;
+    trackRows.clear(true);
+
+    for (auto* track : audioEngine.getTrackPointers())
+    {
+        if (track != nullptr)
+            addTrackRow(*track);
+    }
+}
+
+MainComponent::ProjectSnapshot
+MainComponent::captureSnapshot() const
+{
+    ProjectSnapshot snapshot;
+    snapshot.tracks = audioEngine.captureTrackStates();
+    snapshot.positionSeconds =
+        audioEngine.getPositionSeconds();
+    snapshot.bpm = bpmSlider.getValue();
+    snapshot.masterGain = masterSlider.getValue();
+    snapshot.zoom = zoomSlider.getValue();
+    snapshot.view = viewSlider.getValue();
+    snapshot.gridId = gridCombo.getSelectedId();
+    snapshot.snapEnabled = snapButton.getToggleState();
+
+    return snapshot;
+}
+
+void MainComponent::pushUndoSnapshot(
+    const ProjectSnapshot& snapshot
+)
+{
+    undoStack.push_back(snapshot);
+
+    if (undoStack.size() > maxHistoryEntries)
+        undoStack.erase(undoStack.begin());
+
+    redoStack.clear();
+    updateHistoryButtons();
+}
+
+bool MainComponent::restoreSnapshot(
+    const ProjectSnapshot& snapshot
+)
+{
+    audioEngine.pause();
+
+    const auto result =
+        audioEngine.restoreTrackStates(snapshot.tracks);
+
+    if (result.failed())
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Restauration impossible",
+            result.getErrorMessage()
+        );
+        return false;
+    }
+
+    bpmSlider.setValue(
+        snapshot.bpm,
+        juce::dontSendNotification
+    );
+    masterSlider.setValue(
+        snapshot.masterGain,
+        juce::dontSendNotification
+    );
+    zoomSlider.setValue(
+        snapshot.zoom,
+        juce::dontSendNotification
+    );
+    viewSlider.setValue(
+        snapshot.view,
+        juce::dontSendNotification
+    );
+    gridCombo.setSelectedId(
+        snapshot.gridId,
+        juce::dontSendNotification
+    );
+    snapButton.setToggleState(
+        snapshot.snapEnabled,
+        juce::dontSendNotification
+    );
+
+    audioEngine.setMasterGain(
+        static_cast<float>(snapshot.masterGain)
+    );
+    audioEngine.setPositionSeconds(
+        snapshot.positionSeconds
+    );
+
+    rebuildTrackRowsFromEngine();
+    updateGridSettings();
+    updateProjectState();
+
+    return true;
+}
+
+void MainComponent::undo()
+{
+    if (undoStack.empty())
+        return;
+
+    const auto current = captureSnapshot();
+    const auto target = undoStack.back();
+
+    if (! restoreSnapshot(target))
+        return;
+
+    undoStack.pop_back();
+    redoStack.push_back(current);
+
+    if (redoStack.size() > maxHistoryEntries)
+        redoStack.erase(redoStack.begin());
+
+    updateHistoryButtons();
+}
+
+void MainComponent::redo()
+{
+    if (redoStack.empty())
+        return;
+
+    const auto current = captureSnapshot();
+    const auto target = redoStack.back();
+
+    if (! restoreSnapshot(target))
+        return;
+
+    redoStack.pop_back();
+    undoStack.push_back(current);
+
+    if (undoStack.size() > maxHistoryEntries)
+        undoStack.erase(undoStack.begin());
+
+    updateHistoryButtons();
+}
+
+void MainComponent::updateHistoryButtons()
+{
+    undoButton.setEnabled(! undoStack.empty());
+    redoButton.setEnabled(! redoStack.empty());
 }
 
 void MainComponent::updateGridSettings()

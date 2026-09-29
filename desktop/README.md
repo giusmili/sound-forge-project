@@ -1,71 +1,60 @@
-# SonoForge Studio Desktop 0.4.2
+# SonoForge Studio Desktop 0.4.3
 
-Cette iteration ajoute le trim non destructif gauche/droite en plus du Split au playhead.\n\n## Trim non destructif\n\nSelectionnez un clip puis faites glisser son bord gauche ou droit. Les poignees jaunes indiquent les zones de trim. Le curseur change pour signaler le redimensionnement.\n\nLe bord gauche modifie simultanement sourceStart et startOffset afin de garder la fin du clip en place. Le bord droit modifie sourceEnd. Le snapping 1/4, 1/8 ou 1/16 reste applicable pendant le trim.\n\nLe fichier audio original n'est jamais modifie.
+Cette iteration ajoute un historique Undo / Redo base sur des snapshots de projet.
 
-## Split au playhead
+## Undo / Redo
 
-Procedure :
+Les boutons Annuler et Retablir permettent de revenir sur les principales operations d'edition :
 
-1. selectionner un clip
-2. placer le playhead a l'interieur du clip
-3. cliquer sur Couper
+- import audio
+- deplacement d'un clip
+- trim gauche / droite
+- duplication
+- suppression
+- Split au playhead
 
-SonoForge cree alors deux clips independants qui referencent toujours le meme fichier audio original.
+L'historique conserve jusqu'a 50 etats.
 
-Avant :
+## Snapshot de projet
 
-```text
-sourceStart ------------------------------ sourceEnd
-|                 CLIP                          |
-|-----------------------------------------------|
-```
-
-Apres une coupe :
+Chaque entree memorise :
 
 ```text
-sourceStart ------- split ------- sourceEnd
-|      CLIP A      |    CLIP B        |
-|------------------|------------------|
+tracks[]
+    sourceFile
+    sourceStart
+    sourceEnd
+    startOffset
+    gain
+    pan
+    mute
+    solo
+
+position du playhead
+BPM
+grille
+snap
+zoom
+vue
+master
 ```
 
-Le clip A conserve le meme startOffset.
+Le moteur peut reconstruire les pistes depuis ce snapshot. Cette architecture servira directement a la prochaine etape : sauvegarder et rouvrir un projet SonoForge.
 
-Le clip B commence exactement a la position du playhead dans le projet.
+## Edition continue
 
-## Donnees non destructives
-
-Aucun fichier audio n'est reecrit.
-
-Pour le clip gauche :
-
-```text
-sourceStart = ancien sourceStart
-sourceEnd   = split
-```
-
-Pour le clip droit :
-
-```text
-sourceStart = split
-sourceEnd   = ancien sourceEnd
-startOffset = position du playhead
-```
-
-Les reglages gain, pan, Mute et Solo sont recopies sur le clip droit.
-
-## Protection
-
-La commande Couper n'est active que lorsque le playhead se trouve reellement a l'interieur du clip selectionne. Une marge minimale de 10 ms evite la creation accidentelle de fragments quasi nuls.
+Lors d'un deplacement ou d'un trim, SonoForge n'ajoute pas une entree d'historique pour chaque pixel. Un seul snapshot est cree au debut du geste.
 
 ## Fonctions conservees
 
 - transport global
 - clips deplacables
 - selection / duplication / suppression
+- Split au playhead
+- trim non destructif
 - grille 1/4, 1/8, 1/16
 - BPM et snapping
 - Play / Pause / Stop
-- seek
 - waveforms
 - zoom et navigation
 - volume / pan / Mute / Solo
@@ -73,11 +62,11 @@ La commande Couper n'est active que lorsque le playhead se trouve reellement a l
 
 ## Prochaine iteration
 
-- trim gauche et droite par glisser
-- undo / redo
-- sauvegarde de projet
-- selection multiple
-- enregistrement audio
+- sauvegarde d'un projet .sonoforge
+- ouverture d'un projet
+- detection des fichiers audio manquants
+- autosave
+- puis enregistrement audio
 
 ## Compilation Windows
 

@@ -17,8 +17,21 @@ public:
     void resized() override;
 
 private:
+    struct ProjectSnapshot
+    {
+        std::vector<AudioEngine::TrackState> tracks;
+        double positionSeconds = 0.0;
+        double bpm = 120.0;
+        double masterGain = 0.8;
+        double zoom = 1.0;
+        double view = 0.0;
+        int gridId = 1;
+        bool snapEnabled = true;
+    };
+
     void openAudioFiles();
     TrackRowComponent* addTrackRow(AudioTrack& track);
+    void rebuildTrackRowsFromEngine();
     void layoutTracks();
     void updateTimeline(double position);
     void updateProjectState();
@@ -28,6 +41,14 @@ private:
     void duplicateSelectedClip();
     void splitSelectedClip();
     void deleteSelectedClip();
+
+    [[nodiscard]] ProjectSnapshot captureSnapshot() const;
+    void pushUndoSnapshot(const ProjectSnapshot& snapshot);
+    bool restoreSnapshot(const ProjectSnapshot& snapshot);
+    void undo();
+    void redo();
+    void updateHistoryButtons();
+
     void updateGridSettings();
     void showAudioSettings();
     void timerCallback() override;
@@ -51,6 +72,8 @@ private:
     juce::Label viewLabel;
 
     juce::TextButton openButton { "Importer pistes" };
+    juce::TextButton undoButton { "Annuler" };
+    juce::TextButton redoButton { "Retablir" };
     juce::TextButton duplicateButton { "Dupliquer" };
     juce::TextButton splitButton { "Couper" };
     juce::TextButton deleteButton { "Supprimer" };
@@ -72,6 +95,9 @@ private:
     juce::Viewport trackViewport;
     juce::OwnedArray<TrackRowComponent> trackRows;
     TrackRowComponent* selectedRow = nullptr;
+
+    std::vector<ProjectSnapshot> undoStack;
+    std::vector<ProjectSnapshot> redoStack;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 

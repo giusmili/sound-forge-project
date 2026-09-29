@@ -7,6 +7,18 @@
 class AudioEngine final : public juce::AudioSource
 {
 public:
+    struct TrackState
+    {
+        juce::File sourceFile;
+        double startOffsetSeconds = 0.0;
+        double sourceStartSeconds = 0.0;
+        double sourceEndSeconds = 0.0;
+        float gain = 1.0f;
+        float pan = 0.0f;
+        bool muted = false;
+        bool solo = false;
+    };
+
     AudioEngine();
     ~AudioEngine() override;
 
@@ -31,6 +43,10 @@ public:
     );
 
     bool removeTrack(AudioTrack* trackToRemove);
+
+    [[nodiscard]] std::vector<TrackState> captureTrackStates() const;
+    juce::Result restoreTrackStates(const std::vector<TrackState>& states);
+    [[nodiscard]] std::vector<AudioTrack*> getTrackPointers() const;
 
     void play();
     void pause();

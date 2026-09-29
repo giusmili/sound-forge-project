@@ -355,6 +355,7 @@ void TrackRowComponent::mouseDown(
         if (onSelectionRequested)
             onSelectionRequested(this);
 
+        editSnapshotSent = false;
         dragStartX = event.position.x;
         dragStartOffset = track.getStartOffsetSeconds();
         dragSourceStart = track.getSourceStartSeconds();
@@ -432,6 +433,14 @@ void TrackRowComponent::mouseDrag(
 
     if (waveformBounds.getWidth() <= 0)
         return;
+
+    if (! editSnapshotSent)
+    {
+        if (onEditBegin)
+            onEditBegin();
+
+        editSnapshotSent = true;
+    }
 
     const auto deltaPixels =
         event.position.x - dragStartX;
@@ -545,6 +554,7 @@ void TrackRowComponent::mouseUp(
         return;
 
     dragMode = DragMode::none;
+    editSnapshotSent = false;
 
     if (onClipMoved)
         onClipMoved();
