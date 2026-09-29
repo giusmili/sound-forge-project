@@ -69,6 +69,23 @@ void MixerChannelComponent::paint(juce::Graphics& graphics)
     graphics.fillRoundedRectangle(getLocalBounds().reduced(3).toFloat(), 6.0f);
     graphics.setColour(juce::Colour(borderColour));
     graphics.drawRoundedRectangle(getLocalBounds().reduced(3).toFloat(), 6.0f, 1.0f);
+
+    auto meterArea = getLocalBounds().reduced(8).withTrimmedTop(184).withTrimmedBottom(28).removeFromRight(18);
+    auto leftMeter = meterArea.removeFromLeft(7);
+    meterArea.removeFromLeft(2);
+    auto rightMeter = meterArea.removeFromLeft(7);
+    graphics.setColour(juce::Colour(0xff0b0d10));
+    graphics.fillRect(leftMeter);
+    graphics.fillRect(rightMeter);
+    const auto drawMeter = [&graphics](juce::Rectangle<int> meter, const float level)
+    {
+        const auto h = static_cast<int>(level * static_cast<float>(meter.getHeight()));
+        auto lit = meter.removeFromBottom(h);
+        graphics.setColour(level > 0.92f ? juce::Colour(0xffe35d5d) : (level > 0.72f ? juce::Colour(0xffe0b84f) : juce::Colour(0xff55c878)));
+        graphics.fillRect(lit);
+    };
+    drawMeter(leftMeter, displayPeakLeft);
+    drawMeter(rightMeter, displayPeakRight);
 }
 
 void MixerChannelComponent::resized()
@@ -92,7 +109,10 @@ void MixerChannelComponent::refreshFromTrack()
         gainSlider.setValue(track.getGain(), juce::dontSendNotification);
     if (! panSlider.isMouseButtonDown())
         panSlider.setValue(track.getPan(), juce::dontSendNotification);
+    displayPeakLeft = juce::jmax(track.getPeakLeft(), displayPeakLeft * 0.82f);
+    displayPeakRight = juce::jmax(track.getPeakRight(), displayPeakRight * 0.82f);
     refreshButtons();
+    repaint();
 }
 
 void MixerChannelComponent::refreshButtons()
