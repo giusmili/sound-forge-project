@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 
 #include "AudioTrack.h"
+#include "MidiInstrumentTrack.h"
 
 class AudioEngine final : public juce::AudioSource,
                           public juce::AudioIODeviceCallback
@@ -18,6 +19,14 @@ public:
         float pan = 0.0f;
         bool muted = false;
         bool solo = false;
+    };
+
+    struct MidiTrackState
+    {
+        juce::String name;
+        float gain = 0.8f;
+        bool muted = false;
+        int instrumentId = 1;
     };
 
     AudioEngine();
@@ -56,9 +65,24 @@ public:
 
     bool removeTrack(AudioTrack* trackToRemove);
 
+    MidiInstrumentTrack* addMidiInstrumentTrack(
+        const juce::String& name
+    );
+    bool removeMidiInstrumentTrack(
+        MidiInstrumentTrack* trackToRemove
+    );
+
     [[nodiscard]] std::vector<TrackState> captureTrackStates() const;
-    juce::Result restoreTrackStates(const std::vector<TrackState>& states);
+    [[nodiscard]] std::vector<MidiTrackState> captureMidiTrackStates() const;
+    juce::Result restoreProjectTracks(
+        const std::vector<TrackState>& audioStates,
+        const std::vector<MidiTrackState>& midiStates
+    );
+    juce::Result restoreTrackStates(
+        const std::vector<TrackState>& states
+    );
     [[nodiscard]] std::vector<AudioTrack*> getTrackPointers() const;
+    [[nodiscard]] std::vector<MidiInstrumentTrack*> getMidiTrackPointers() const;
 
     juce::Result startRecording(const juce::File& file);
     void stopRecording();
@@ -92,6 +116,7 @@ private:
     juce::AudioThumbnailCache thumbnailCache { 64 };
     juce::MixerAudioSource mixer;
     std::vector<std::unique_ptr<AudioTrack>> tracks;
+    std::vector<std::unique_ptr<MidiInstrumentTrack>> midiTracks;
 
     mutable juce::CriticalSection trackLock;
 

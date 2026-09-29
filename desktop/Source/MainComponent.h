@@ -5,8 +5,10 @@
 #include "AudioEngine.h"
 #include "TimelineRulerComponent.h"
 #include "TrackRowComponent.h"
+#include "MidiTrackRowComponent.h"
 
 class MainComponent final : public juce::Component,
+                            public juce::MenuBarModel,
                             private juce::Timer
 {
 public:
@@ -15,6 +17,17 @@ public:
 
     void paint(juce::Graphics& graphics) override;
     void resized() override;
+
+    juce::StringArray getMenuBarNames() override;
+    juce::PopupMenu getMenuForIndex(
+        int topLevelMenuIndex,
+        const juce::String& menuName
+    ) override;
+    void menuItemSelected(
+        int menuItemID,
+        int topLevelMenuIndex
+    ) override;
+
     void requestApplicationQuit(
         std::function<void()> quitCallback
     );
@@ -23,6 +36,7 @@ private:
     struct ProjectSnapshot
     {
         std::vector<AudioEngine::TrackState> tracks;
+        std::vector<AudioEngine::MidiTrackState> midiTracks;
         double positionSeconds = 0.0;
         double bpm = 120.0;
         double masterGain = 0.8;
@@ -80,6 +94,13 @@ private:
     [[nodiscard]] juce::File getRecentProjectsFile() const;
 
     TrackRowComponent* addTrackRow(AudioTrack& track);
+    MidiTrackRowComponent* addMidiTrackRow(
+        MidiInstrumentTrack& track
+    );
+    void addMidiInstrumentTrack();
+    void deleteMidiTrackRow(
+        MidiTrackRowComponent* row
+    );
     void rebuildTrackRowsFromEngine();
     void layoutTracks();
     void updateTimeline(double position);
@@ -124,10 +145,14 @@ private:
     juce::Label zoomLabel;
     juce::Label viewLabel;
 
+    juce::MenuBarComponent menuBar { this };
+
     juce::TextButton openProjectButton { "Ouvrir projet" };
     juce::TextButton saveProjectButton { "Enregistrer" };
     juce::TextButton recoverButton { "Recuperer" };
-    juce::TextButton openButton { "Importer pistes" };
+    juce::TextButton openButton { "+ Audio" };
+    juce::TextButton midiTrackButton { "+ MIDI" };
+    juce::TextButton quitButton { "Quitter" };
     juce::ComboBox recentProjectsCombo;
     juce::TextButton undoButton { "Annuler" };
     juce::TextButton redoButton { "Retablir" };
@@ -152,6 +177,7 @@ private:
     juce::Component trackList;
     juce::Viewport trackViewport;
     juce::OwnedArray<TrackRowComponent> trackRows;
+    juce::OwnedArray<MidiTrackRowComponent> midiTrackRows;
     TrackRowComponent* selectedRow = nullptr;
 
     std::vector<ProjectSnapshot> undoStack;

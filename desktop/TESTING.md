@@ -1,68 +1,76 @@
-# SonoForge Studio 0.6 - Guide de test Windows
+# SonoForge Studio 0.7 - Guide de test Windows
 
-Cette build est une version de test du MVP natif SonoForge Studio.
+## 1. Fermeture
 
-## Environnement recommande
+Tester successivement :
 
-- Windows 11 64 bits
-- processeur Intel ou AMD x64
-- sortie audio Windows WASAPI
-- microphone ou interface audio si vous testez Record
-- fichiers audio WAV, MP3, AIFF, FLAC ou OGG
+- le bouton X de la fenetre
+- le bouton Quitter
+- Fichier > Quitter
 
-## Demarrage
+Modifier d'abord le projet afin de verifier la fenetre :
 
-1. Extraire completement le ZIP.
-2. Lancer `SonoForge Studio.exe`.
-3. Si Windows affiche SmartScreen, verifier que le fichier provient bien du package GitHub SonoForge avant de poursuivre.
-4. Ouvrir `Audio` pour choisir l'entree et la sortie audio.
+```text
+Enregistrer
+Ne pas enregistrer
+Annuler
+```
 
-Cette build n'est pas encore signee numeriquement.
+Chaque choix doit avoir le comportement attendu.
 
-## Parcours de test conseille
+## 2. Piste Audio
 
-### Lecture et montage
+Cliquer sur + Audio ou utiliser :
 
-1. Importer deux fichiers audio.
-2. Lancer Play, Pause et Stop.
-3. Deplacer un clip sur la timeline.
-4. Tester le Snap avec les grilles 1/4, 1/8 et 1/16.
-5. Tester Zoom et Vue.
-6. Tester volume, pan, Mute et Solo.
-7. Dupliquer puis supprimer un clip.
-8. Placer le playhead au milieu d'un clip et utiliser Couper.
-9. Redimensionner les bords gauche et droit du clip.
-10. Tester Annuler et Retablir.
+```text
+Piste > Ajouter piste audio...
+```
 
-### Projet
+Choisir un WAV ou MP3 puis verifier lecture, waveform, volume, pan, Mute et Solo.
 
-1. Enregistrer un projet `.sonoforge`.
-2. Fermer puis relancer SonoForge.
-3. Rouvrir le projet.
-4. Verifier que les clips, reglages, BPM et positions sont restaures.
-5. Modifier le projet et attendre au moins 30 secondes pour tester l'autosave.
-6. Verifier la presence des fichiers `.autosave.sonoforge` et `.backup.sonoforge` lorsque cela s'applique.
+## 3. Piste MIDI / Instrument
 
-### Enregistrement audio
+Cliquer sur + MIDI ou utiliser :
 
-1. Dans Audio, choisir une entree microphone ou interface.
-2. Positionner le playhead.
-3. Cliquer sur Record.
-4. Produire quelques secondes d'audio.
-5. Arreter l'enregistrement.
-6. Verifier qu'une nouvelle piste apparait au bon endroit.
-7. Lire la piste enregistree.
+```text
+Piste > Ajouter piste MIDI / Instrument
+```
 
-## Points a surveiller
+Une ligne violette Instrument doit apparaitre.
 
-- absence de craquements ou coupures audio
-- synchronisation du playhead
-- latence a l'enregistrement
-- comportement apres changement de peripherique audio
-- stabilite lors de l'import de plusieurs fichiers
-- conservation correcte des projets apres fermeture
-- comportement si un fichier audio source a ete deplace
+Verifier :
 
-## Etat de la build
+- nom Instrument 1, Instrument 2...
+- Instrument : Basic Synth
+- bouton Tester C4
+- volume
+- Mute
+- Supprimer
 
-SonoForge 0.6 reste une build MVP / alpha technique. Le CI valide la compilation Windows, mais les tests sur du materiel audio reel restent indispensables avant une distribution publique.
+Cliquer Tester C4. Un son de synthese court doit etre audible sur la sortie audio active.
+
+## 4. Projet MIDI
+
+Ajouter une piste MIDI, modifier son volume ou Mute, puis enregistrer le projet.
+
+Fermer SonoForge, relancer et ouvrir le .sonoforge.
+
+La piste MIDI doit etre restauree avec ses reglages.
+
+## 5. Ancien projet
+
+Ouvrir un ancien projet .sonoforge cree avec la version 0.6.
+
+Il doit continuer a s'ouvrir normalement.
+
+## Limites MIDI 0.7
+
+Cette version valide le type de piste instrument et le routage sonore. Elle ne contient pas encore :
+
+- piano roll
+- clips MIDI
+- edition de notes
+- clavier MIDI externe
+- VST3
+
+Ces fonctions arrivent sur cette base.
