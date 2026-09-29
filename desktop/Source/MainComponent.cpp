@@ -456,6 +456,10 @@ void MainComponent::timerCallback()
 
     updateTimeline(current);
     mixer.refresh();
+    mixer.setMasterLevels(
+        audioEngine.getMasterPeakLeft(),
+        audioEngine.getMasterPeakRight()
+    );
     pauseButton.setEnabled(audioEngine.isPlaying());
 }
 
