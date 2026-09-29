@@ -17,7 +17,7 @@ MainComponent::MainComponent()
     setSize(1180, 760);
 
     titleLabel.setText(
-        "SonoForge Studio 0.2C",
+        "SonoForge Studio 0.3",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -324,6 +324,11 @@ void MainComponent::addTrackRow(AudioTrack& track)
         audioEngine.refreshSoloState();
     };
 
+    row->onClipMoved = [this]
+    {
+        clipMoved();
+    };
+
     trackList.addAndMakeVisible(row);
     layoutTracks();
 }
@@ -380,6 +385,16 @@ void MainComponent::updateTimeline(
 void MainComponent::seekTo(const double seconds)
 {
     audioEngine.setPositionSeconds(seconds);
+
+    updateTimeline(
+        audioEngine.getPositionSeconds()
+    );
+}
+
+void MainComponent::clipMoved()
+{
+    audioEngine.refreshTrackAlignment();
+
     updateTimeline(
         audioEngine.getPositionSeconds()
     );

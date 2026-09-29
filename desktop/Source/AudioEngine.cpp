@@ -24,6 +24,7 @@ AudioEngine::~AudioEngine()
     deviceManager.removeAudioCallback(&sourcePlayer);
     sourcePlayer.setSource(nullptr);
 
+    const juce::ScopedLock lock(trackLock);
     mixer.removeAllInputs();
     tracks.clear();
 }
@@ -33,11 +34,15 @@ void AudioEngine::prepareToPlay(
     const double sampleRate
 )
 {
+    outputSampleRate.store(sampleRate);
+
+    const juce::ScopedLock lock(trackLock);
     mixer.prepareToPlay(samplesPerBlockExpected, sampleRate);
 }
 
 void AudioEngine::releaseResources()
 {
+    const juce::ScopedLock lock(trackLock);
     mixer.releaseResources();
 }
 
@@ -45,6 +50,19 @@ void AudioEngine::getNextAudioBlock(
     const juce::AudioSourceChannelInfo& bufferToFill
 )
 {
+    const juce::ScopedLock lock(trackLock);
+
+    const auto currentPosition =
+        projectPositionSeconds.load();
+
+    const auto projectPlaying =
+        playing.load();
+
+    syncTracksUnlocked(
+        currentPosition,
+        projectPlaying
+    );
+
     mixer.getNextAudioBlock(bufferToFill);
 
     bufferToFill.buffer->applyGain(
@@ -52,6 +70,33 @@ void AudioEngine::getNextAudioBlock(
         bufferToFill.numSamples,
         juce::jlimit(0.0f, 1.0f, masterGain.load())
     );
+
+    if (! projectPlaying)
+        return;
+
+    const auto sampleRate = outputSampleRate.load();
+
+    if (sampleRate <= 0.0)
+        return;
+
+    const auto nextPosition =
+        currentPosition
+        + static_cast<double>(bufferToFill.numSamples)
+            / sampleRate;
+
+    const auto projectLength =
+        getLengthSecondsUnlocked();
+
+    if (nextPosition >= projectLength)
+    {
+        projectPositionSeconds.store(projectLength);
+        playing.store(false);
+        syncTracksUnlocked(projectLength, false);
+    }
+    else
+    {
+        projectPositionSeconds.store(nextPosition);
+    }
 }
 
 juce::Result AudioEngine::addTrackFromFile(
@@ -84,60 +129,105 @@ juce::Result AudioEngine::addTrackFromFile(
         sourceSampleRate
     );
 
+    const juce::ScopedLock lock(trackLock);
+
     createdTrack = track.get();
     tracks.push_back(std::move(track));
 
     mixer.addInputSource(createdTrack, false);
-    refreshSoloState();
+
+    const auto anySolo = std::any_of(
+        tracks.begin(),
+        tracks.end(),
+        [](const auto& item)
+        {
+            return item->isSolo();
+        }
+    );
+
+    for (auto& item : tracks)
+        item->setSoloMuted(anySolo && ! item->isSolo());
+
+    createdTrack->syncToProjectPosition(
+        projectPositionSeconds.load(),
+        playing.load()
+    );
 
     return juce::Result::ok();
 }
 
 void AudioEngine::play()
 {
-    const auto length = getLengthSeconds();
+    const juce::ScopedLock lock(trackLock);
+
+    const auto length =
+        getLengthSecondsUnlocked();
 
     if (length <= 0.0)
         return;
 
-    if (getPositionSeconds() >= length - 0.001)
-        setPositionSeconds(0.0);
+    auto position =
+        projectPositionSeconds.load();
 
-    for (auto& track : tracks)
-        track->play();
+    if (position >= length - 0.001)
+    {
+        position = 0.0;
+        projectPositionSeconds.store(position);
+    }
+
+    playing.store(true);
+    syncTracksUnlocked(position, true);
 }
 
 void AudioEngine::pause()
 {
-    for (auto& track : tracks)
-        track->pause();
+    playing.store(false);
+
+    const juce::ScopedLock lock(trackLock);
+    syncTracksUnlocked(
+        projectPositionSeconds.load(),
+        false
+    );
 }
 
 void AudioEngine::stop()
 {
-    for (auto& track : tracks)
-        track->stop();
+    playing.store(false);
+    projectPositionSeconds.store(0.0);
+
+    const juce::ScopedLock lock(trackLock);
+    syncTracksUnlocked(0.0, false);
 }
 
 void AudioEngine::setPositionSeconds(const double seconds)
 {
+    const juce::ScopedLock lock(trackLock);
+
     const auto position = juce::jlimit(
         0.0,
-        getLengthSeconds(),
+        getLengthSecondsUnlocked(),
         seconds
     );
 
-    for (auto& track : tracks)
-        track->setPositionSeconds(position);
+    projectPositionSeconds.store(position);
+
+    syncTracksUnlocked(
+        position,
+        playing.load()
+    );
 }
 
 void AudioEngine::setMasterGain(const float gain)
 {
-    masterGain.store(juce::jlimit(0.0f, 1.0f, gain));
+    masterGain.store(
+        juce::jlimit(0.0f, 1.0f, gain)
+    );
 }
 
 void AudioEngine::refreshSoloState()
 {
+    const juce::ScopedLock lock(trackLock);
+
     const auto anySolo = std::any_of(
         tracks.begin(),
         tracks.end(),
@@ -151,39 +241,35 @@ void AudioEngine::refreshSoloState()
         track->setSoloMuted(anySolo && ! track->isSolo());
 }
 
-bool AudioEngine::isPlaying() const
+void AudioEngine::refreshTrackAlignment()
 {
-    for (const auto& track : tracks)
-    {
-        if (track->isPlaying())
-            return true;
-    }
+    const juce::ScopedLock lock(trackLock);
 
-    return false;
+    syncTracksUnlocked(
+        projectPositionSeconds.load(),
+        playing.load()
+    );
 }
 
-double AudioEngine::getPositionSeconds() const
+bool AudioEngine::isPlaying() const noexcept
 {
-    double position = 0.0;
+    return playing.load();
+}
 
-    for (const auto& track : tracks)
-        position = juce::jmax(position, track->getPositionSeconds());
-
-    return position;
+double AudioEngine::getPositionSeconds() const noexcept
+{
+    return projectPositionSeconds.load();
 }
 
 double AudioEngine::getLengthSeconds() const
 {
-    double length = 0.0;
-
-    for (const auto& track : tracks)
-        length = juce::jmax(length, track->getLengthSeconds());
-
-    return length;
+    const juce::ScopedLock lock(trackLock);
+    return getLengthSecondsUnlocked();
 }
 
 int AudioEngine::getTrackCount() const noexcept
 {
+    const juce::ScopedLock lock(trackLock);
     return static_cast<int>(tracks.size());
 }
 
@@ -200,4 +286,33 @@ juce::AudioFormatManager& AudioEngine::getFormatManager() noexcept
 juce::AudioThumbnailCache& AudioEngine::getThumbnailCache() noexcept
 {
     return thumbnailCache;
+}
+
+double AudioEngine::getLengthSecondsUnlocked() const
+{
+    double length = 0.0;
+
+    for (const auto& track : tracks)
+    {
+        length = juce::jmax(
+            length,
+            track->getProjectEndSeconds()
+        );
+    }
+
+    return length;
+}
+
+void AudioEngine::syncTracksUnlocked(
+    const double projectPosition,
+    const bool projectPlaying
+)
+{
+    for (auto& track : tracks)
+    {
+        track->syncToProjectPosition(
+            projectPosition,
+            projectPlaying
+        );
+    }
 }

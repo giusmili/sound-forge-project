@@ -22,6 +22,8 @@ public:
     void paint(juce::Graphics& graphics) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
+    void mouseUp(const juce::MouseEvent& event) override;
 
     void setTimelineState(
         double projectLengthSeconds,
@@ -30,6 +32,7 @@ public:
 
     std::function<void(double)> onSeek;
     std::function<void()> onSoloChanged;
+    std::function<void()> onClipMoved;
 
 private:
     void changeListenerCallback(
@@ -47,6 +50,11 @@ private:
 
     double projectLength = 0.0;
     double playheadPosition = 0.0;
+
+    bool draggingClip = false;
+    float dragStartX = 0.0f;
+    double dragStartOffset = 0.0;
+    double dragTimelineLength = 0.0;
 
     juce::Label nameLabel;
     juce::Label volumeLabel;

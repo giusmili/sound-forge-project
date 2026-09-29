@@ -22,6 +22,7 @@ private:
     void layoutTracks();
     void updateTimeline(double position);
     void seekTo(double seconds);
+    void clipMoved();
     void showAudioSettings();
     void timerCallback() override;
 

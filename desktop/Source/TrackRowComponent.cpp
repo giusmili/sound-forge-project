@@ -7,6 +7,7 @@ namespace
 constexpr auto rowColour = 0xff222831;
 constexpr auto timelineColour = 0xff15191f;
 constexpr auto clipColour = 0xff244d6e;
+constexpr auto clipDragColour = 0xff2f6f9d;
 constexpr auto waveformColour = 0xff81c7ff;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto accentColour = 0xff5aa9ff;
@@ -142,7 +143,13 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
     {
         const auto clipBounds = getClipBounds();
 
-        graphics.setColour(juce::Colour(clipColour));
+        graphics.setColour(
+            juce::Colour(
+                draggingClip
+                    ? clipDragColour
+                    : clipColour
+            )
+        );
         graphics.fillRoundedRectangle(
             clipBounds.toFloat(),
             4.0f
@@ -161,6 +168,22 @@ void TrackRowComponent::paint(juce::Graphics& graphics)
                 0.0,
                 track.getLengthSeconds(),
                 1.0f
+            );
+        }
+
+        if (clipBounds.getWidth() > 70)
+        {
+            graphics.setColour(
+                juce::Colour(textColour).withAlpha(0.8f)
+            );
+            graphics.setFont(10.0f);
+            graphics.drawText(
+                juce::String(
+                    track.getStartOffsetSeconds(),
+                    2
+                ) + " s",
+                clipBounds.reduced(6, 3).removeFromTop(14),
+                juce::Justification::centredLeft
             );
         }
 
@@ -239,6 +262,19 @@ void TrackRowComponent::mouseDown(
     const juce::MouseEvent& event
 )
 {
+    const auto clipBounds = getClipBounds();
+
+    if (projectLength > 0.0
+        && clipBounds.contains(event.getPosition()))
+    {
+        draggingClip = true;
+        dragStartX = event.position.x;
+        dragStartOffset = track.getStartOffsetSeconds();
+        dragTimelineLength = projectLength;
+        repaint();
+        return;
+    }
+
     const auto waveformBounds = getWaveformBounds();
 
     if (projectLength <= 0.0
@@ -262,6 +298,54 @@ void TrackRowComponent::mouseDown(
 
     if (onSeek)
         onSeek(ratio * projectLength);
+}
+
+void TrackRowComponent::mouseDrag(
+    const juce::MouseEvent& event
+)
+{
+    if (! draggingClip || dragTimelineLength <= 0.0)
+        return;
+
+    const auto waveformBounds = getWaveformBounds();
+
+    if (waveformBounds.getWidth() <= 0)
+        return;
+
+    const auto deltaPixels =
+        event.position.x - dragStartX;
+
+    const auto deltaSeconds =
+        static_cast<double>(deltaPixels)
+        / static_cast<double>(waveformBounds.getWidth())
+        * dragTimelineLength;
+
+    track.setStartOffsetSeconds(
+        juce::jmax(
+            0.0,
+            dragStartOffset + deltaSeconds
+        )
+    );
+
+    if (onClipMoved)
+        onClipMoved();
+
+    repaint();
+}
+
+void TrackRowComponent::mouseUp(
+    const juce::MouseEvent&
+)
+{
+    if (! draggingClip)
+        return;
+
+    draggingClip = false;
+
+    if (onClipMoved)
+        onClipMoved();
+
+    repaint();
 }
 
 void TrackRowComponent::setTimelineState(
@@ -323,25 +407,46 @@ TrackRowComponent::getWaveformBounds() const
 juce::Rectangle<int>
 TrackRowComponent::getClipBounds() const
 {
-    auto waveformBounds = getWaveformBounds();
+    const auto waveformBounds = getWaveformBounds();
 
     if (projectLength <= 0.0)
         return {};
 
-    const auto ratio = juce::jlimit(
+    const auto startRatio = juce::jlimit(
+        0.0,
+        1.0,
+        track.getStartOffsetSeconds() / projectLength
+    );
+
+    const auto durationRatio = juce::jlimit(
         0.0,
         1.0,
         track.getLengthSeconds() / projectLength
     );
 
+    const auto x = waveformBounds.getX()
+        + static_cast<int>(
+            std::round(
+                startRatio * waveformBounds.getWidth()
+            )
+        );
+
     const auto width = juce::jmax(
         1,
         static_cast<int>(
             std::round(
-                ratio * waveformBounds.getWidth()
+                durationRatio * waveformBounds.getWidth()
             )
         )
     );
 
-    return waveformBounds.withWidth(width);
+    return juce::Rectangle<int>(
+        x,
+        waveformBounds.getY(),
+        juce::jmin(
+            width,
+            waveformBounds.getRight() - x
+        ),
+        waveformBounds.getHeight()
+    );
 }
