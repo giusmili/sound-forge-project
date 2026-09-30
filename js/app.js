@@ -3,7 +3,9 @@ const ELEMENT_IDS = [
   'playBtn', 'pauseBtn', 'stopBtn', 'rewindBtn', 'loopBtn', 'metronomeBtn',
   'masterVolume', 'bpmInput', 'zoomRange', 'timeDisplay',
   'tracksContainer', 'trackTemplate', 'ruler', 'dropZone',
-  'trackCount', 'projectDuration', 'statusText'
+  'trackCount', 'projectDuration', 'statusText',
+  'addMidiTrackBtn', 'mixerBtn', 'mixerPanel', 'closeMixerBtn', 'mixerChannels',
+  'scorePanel', 'closeScoreBtn', 'scoreCanvas', 'scoreTitle'
 ];
 
 const els = Object.fromEntries(ELEMENT_IDS.map(id => [id, document.getElementById(id)]));
@@ -125,7 +127,9 @@ function createTrack(name = `Piste ${nextTrackId}`) {
     canvas,
     clipLabel: query('.clip-label'),
     playheadEl: query('.playhead-local'),
-    fileData: null
+    fileData: null,
+    type: 'audio',
+    midi: null
   };
 
   const nameInput = query('.track-name');
@@ -135,6 +139,8 @@ function createTrack(name = `Piste ${nextTrackId}`) {
   const panSlider = query('.pan-slider');
   const offsetInput = query('.offset-input');
   const removeBtn = query('.remove-track');
+  const scoreBtn = query('.score-btn');
+  track.scoreBtn = scoreBtn;
 
   nameInput.value = name;
   nameInput.addEventListener('input', () => {
@@ -145,21 +151,25 @@ function createTrack(name = `Piste ${nextTrackId}`) {
     track.muted = !track.muted;
     muteBtn.classList.toggle('active', track.muted);
     updateActiveTrackGains();
+    syncMixerFromTrack(track);
   });
 
   soloBtn.addEventListener('click', () => {
     track.solo = !track.solo;
     soloBtn.classList.toggle('active', track.solo);
     updateActiveTrackGains();
+    syncMixerFromTrack(track);
   });
 
   volumeSlider.addEventListener('input', () => {
     track.volume = Number(volumeSlider.value);
     updateActiveTrackGains();
+    syncMixerFromTrack(track);
   });
 
   panSlider.addEventListener('input', () => {
     track.pan = Number(panSlider.value);
+    syncMixerFromTrack(track);
     track.panNode?.pan.setValueAtTime(track.pan, ensureAudio().currentTime);
   });
 
@@ -173,6 +183,7 @@ function createTrack(name = `Piste ${nextTrackId}`) {
   removeBtn.addEventListener('click', () => {
     stopTrackSource(track);
     tracks = tracks.filter(t => t !== track);
+    renderMixer();
     node.remove();
     updateProjectInfo();
     setStatus(`Piste ${track.name} supprimée`);
@@ -187,7 +198,109 @@ function createTrack(name = `Piste ${nextTrackId}`) {
   tracks.push(track);
   els.tracksContainer.appendChild(node);
   updateProjectInfo();
+  renderMixer();
   return track;
+}
+
+function createMidiTrack() {
+  const track = createTrack(`MIDI ${nextTrackId}`);
+  track.type = 'midi';
+  track.element.classList.add('midi-track');
+  track.midi = {
+    channel: 1, program: 0,
+    notes: [
+      { pitch: 60, start: 0, duration: 1, velocity: 100 },
+      { pitch: 62, start: 1, duration: 1, velocity: 100 },
+      { pitch: 64, start: 2, duration: 1, velocity: 100 },
+      { pitch: 65, start: 3, duration: 1, velocity: 100 },
+      { pitch: 67, start: 4, duration: 2, velocity: 105 },
+      { pitch: 64, start: 6, duration: 1, velocity: 95 },
+      { pitch: 60, start: 7, duration: 1, velocity: 100 }
+    ]
+  };
+  track.scoreBtn.hidden = false;
+  track.scoreBtn.addEventListener('click', e => { e.stopPropagation(); showScore(track); });
+  track.clipLabel.textContent = 'MIDI · 8 temps · démo';
+  renderMidiLane(track);
+  renderMixer();
+  setStatus('Piste MIDI ajoutée');
+  return track;
+}
+
+function renderMidiLane(track) {
+  if (track.type !== 'midi' || !track.midi) return;
+  const lane = track.lane;
+  lane.querySelector('.midi-grid')?.remove();
+  const grid = document.createElement('div');
+  grid.className = 'midi-grid';
+  const beatWidth = 42;
+  const notes = track.midi.notes;
+  notes.forEach(n => {
+    const el = document.createElement('span');
+    el.className = 'midi-note';
+    el.style.left = `${12 + n.start * beatWidth}px`;
+    el.style.width = `${Math.max(8, n.duration * beatWidth - 3)}px`;
+    el.style.top = `${55 - (n.pitch - 60) * 4}px`;
+    grid.appendChild(el);
+  });
+  lane.appendChild(grid);
+}
+
+function renderMixer() {
+  if (!els.mixerChannels) return;
+  els.mixerChannels.innerHTML = '';
+  tracks.forEach(track => {
+    const strip = document.createElement('div');
+    strip.className = 'mixer-strip';
+    strip.dataset.trackId = String(track.id);
+    strip.innerHTML = `<strong title="${track.name}">${track.name}</strong>
+      <div><button class="mx-mute">M</button> <button class="mx-solo">S</button></div>
+      <input class="mixer-fader mx-volume" type="range" min="0" max="1.5" step="0.01" value="${track.volume}">
+      <label>Pan <input class="mx-pan" type="range" min="-1" max="1" step="0.01" value="${track.pan}"></label>
+      <div class="meter"><span></span></div>`;
+    const mute = strip.querySelector('.mx-mute');
+    const solo = strip.querySelector('.mx-solo');
+    mute.classList.toggle('active', track.muted);
+    solo.classList.toggle('active', track.solo);
+    mute.onclick = () => { track.muted = !track.muted; track.element.querySelector('.mute-btn').classList.toggle('active', track.muted); updateActiveTrackGains(); renderMixer(); };
+    solo.onclick = () => { track.solo = !track.solo; track.element.querySelector('.solo-btn').classList.toggle('active', track.solo); updateActiveTrackGains(); renderMixer(); };
+    strip.querySelector('.mx-volume').oninput = e => { track.volume = Number(e.target.value); track.element.querySelector('.volume-slider').value = String(track.volume); updateActiveTrackGains(); };
+    strip.querySelector('.mx-pan').oninput = e => { track.pan = Number(e.target.value); track.element.querySelector('.pan-slider').value = String(track.pan); if(track.panNode) track.panNode.pan.value=track.pan; };
+    els.mixerChannels.appendChild(strip);
+  });
+}
+
+function syncMixerFromTrack(track) {
+  const strip = els.mixerChannels?.querySelector(`[data-track-id="${track.id}"]`);
+  if (!strip) return;
+  strip.querySelector('.mx-volume').value = String(track.volume);
+  strip.querySelector('.mx-pan').value = String(track.pan);
+  strip.querySelector('.mx-mute').classList.toggle('active', track.muted);
+  strip.querySelector('.mx-solo').classList.toggle('active', track.solo);
+}
+
+function showScore(track) {
+  if (!track.midi) return;
+  els.scoreTitle.textContent = `Partition MIDI · ${track.name}`;
+  els.scoreCanvas.innerHTML = '';
+  const caption = document.createElement('div');
+  caption.className = 'score-caption';
+  caption.textContent = '4/4 · clé de sol · vue dérivée des événements MIDI';
+  els.scoreCanvas.appendChild(caption);
+  const staff = document.createElement('div');
+  staff.className = 'staff';
+  [30,40,50,60,70].forEach(top => { const l=document.createElement('div'); l.className='staff-line'; l.style.top=top+'px'; staff.appendChild(l); });
+  const clef=document.createElement('div'); clef.className='staff-clef'; clef.textContent='𝄞'; staff.appendChild(clef);
+  [0,4,8].forEach(beat => { const b=document.createElement('span'); b.className='score-bar'; b.style.left=(beat*82)+'px'; staff.appendChild(b); });
+  track.midi.notes.forEach(n => {
+    const note=document.createElement('span'); note.className='score-note';
+    note.style.left=(22+n.start*82)+'px';
+    note.style.top=(62-(n.pitch-60)*3.5)+'px';
+    note.title=`MIDI ${n.pitch} · ${n.duration} temps`;
+    staff.appendChild(note);
+  });
+  els.scoreCanvas.appendChild(staff);
+  els.scorePanel.hidden=false;
 }
 
 function getAudibleFactor(track) {
@@ -581,6 +694,11 @@ els.fileInput.addEventListener('change', async () => {
   await loadFiles(els.fileInput.files);
   els.fileInput.value = '';
 });
+
+els.addMidiTrackBtn.addEventListener('click', createMidiTrack);
+els.mixerBtn.addEventListener('click', () => { renderMixer(); els.mixerPanel.hidden = false; });
+els.closeMixerBtn.addEventListener('click', () => { els.mixerPanel.hidden = true; });
+els.closeScoreBtn.addEventListener('click', () => { els.scorePanel.hidden = true; });
 
 els.addEmptyTrackBtn.addEventListener('click', () => {
   createTrack();
