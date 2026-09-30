@@ -26,6 +26,8 @@ juce_add_gui_app(SonoForge
 target_sources(SonoForge
     PRIVATE
         Source/Main.cpp
+        Source/AppServices.cpp
+        Source/AppServices.h
         Source/MainComponent.cpp
         Source/MainComponent.h
         Source/AudioEngine.cpp
