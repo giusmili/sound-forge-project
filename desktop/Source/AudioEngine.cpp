@@ -79,7 +79,22 @@ juce::Result AudioEngine::addTrackFromFile(
             "Format audio non pris en charge ou fichier illisible."
         );
 
+    if (reader->sampleRate <= 0.0
+        || reader->numChannels <= 0
+        || reader->lengthInSamples <= 0)
+    {
+        return juce::Result::fail(
+            "Le fichier audio ne contient pas de flux exploitable."
+        );
+    }
+
     const auto sourceSampleRate = reader->sampleRate;
+
+    // Importing mutates the MixerAudioSource input list. Keep the audio
+    // callback detached while the new transport is created and registered.
+    // This deliberately favours stability over seamless hot-import.
+    stop();
+    deviceManager.removeAudioCallback(&sourcePlayer);
 
     auto readerSource = std::make_unique<juce::AudioFormatReaderSource>(
         reader.release(),
@@ -98,6 +113,8 @@ juce::Result AudioEngine::addTrackFromFile(
 
     mixer.addInputSource(createdTrack, false);
     refreshSoloState();
+
+    deviceManager.addAudioCallback(&sourcePlayer);
 
     return juce::Result::ok();
 }
