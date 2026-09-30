@@ -12,7 +12,7 @@ class MainComponent final : public juce::Component,
 {
 public:
     MainComponent();
-    ~MainComponent() override = default;
+    ~MainComponent() override;
 
     void paint(juce::Graphics& graphics) override;
     void resized() override;
@@ -34,6 +34,7 @@ private:
     juce::Label projectLabel;
     juce::Label timeLabel;
     juce::Label masterLabel;
+    juce::Label audioStatusLabel;
 
     juce::TextButton openButton { "Importer pistes" };
     juce::TextButton playButton { "Play" };
@@ -52,6 +53,7 @@ private:
     bool mixerVisible = true;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
+    juce::Component::SafePointer<juce::DialogWindow> audioSettingsWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

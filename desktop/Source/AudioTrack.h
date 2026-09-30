@@ -9,7 +9,8 @@ public:
         juce::File sourceFile,
         juce::String trackName,
         std::unique_ptr<juce::AudioFormatReaderSource> source,
-        double sourceSampleRate
+        double sourceSampleRate,
+        juce::TimeSliceThread& readAheadThread
     );
 
     ~AudioTrack() override;
@@ -18,10 +19,9 @@ public:
     void releaseResources() override;
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferToFill) override;
 
-    void play();
-    void pause();
-    void stop();
     void setPositionSeconds(double seconds);
+    [[nodiscard]] bool isReady(int outputSamples);
+    void clearPeaks() noexcept;
 
     void setGain(float newGain);
     void setPan(float newPan);
@@ -33,10 +33,8 @@ public:
     [[nodiscard]] float getPan() const noexcept;
     [[nodiscard]] bool isMuted() const noexcept;
     [[nodiscard]] bool isSolo() const noexcept;
-    [[nodiscard]] bool isPlaying() const;
     [[nodiscard]] float getPeakLeft() const noexcept;
     [[nodiscard]] float getPeakRight() const noexcept;
-    [[nodiscard]] double getPositionSeconds() const;
     [[nodiscard]] double getLengthSeconds() const;
     [[nodiscard]] const juce::String& getName() const noexcept;
     [[nodiscard]] const juce::File& getSourceFile() const noexcept;
@@ -45,7 +43,14 @@ private:
     juce::File file;
     juce::String name;
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
-    juce::AudioTransportSource transport;
+    const double sourceRate;
+    const double lengthSeconds;
+    // Declaration order is ownership order: the resampler and buffer must be
+    // destroyed before the reader and the engine's read-ahead thread.
+    juce::BufferingAudioSource bufferedSource;
+    juce::ResamplingAudioSource resampler;
+    double outputRate = 0.0;
+    bool prepared = false;
 
     std::atomic<float> gain { 1.0f };
     std::atomic<float> pan { 0.0f };

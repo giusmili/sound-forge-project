@@ -1,47 +1,88 @@
 #include "AudioTrack.h"
 
+#include <cmath>
+
 AudioTrack::AudioTrack(
     juce::File sourceFile,
     juce::String trackName,
     std::unique_ptr<juce::AudioFormatReaderSource> source,
-    const double sourceSampleRate
+    const double sourceSampleRate,
+    juce::TimeSliceThread& readAheadThread
 )
     : file(std::move(sourceFile)),
       name(std::move(trackName)),
-      readerSource(std::move(source))
+      readerSource(std::move(source)),
+      sourceRate(sourceSampleRate),
+      lengthSeconds(static_cast<double>(readerSource->getTotalLength()) / sourceRate),
+      bufferedSource(readerSource.get(), readAheadThread, false, 131072, 2, false),
+      resampler(&bufferedSource, false, 2)
 {
-    transport.setSource(
-        readerSource.get(),
-        32768,
-        nullptr,
-        sourceSampleRate
-    );
 }
 
 AudioTrack::~AudioTrack()
 {
-    transport.stop();
-    transport.setSource(nullptr);
+    releaseResources();
 }
 
-void AudioTrack::prepareToPlay(
-    const int samplesPerBlockExpected,
-    const double sampleRate
-)
+void AudioTrack::prepareToPlay(const int blockSize, const double sampleRate)
 {
-    transport.prepareToPlay(samplesPerBlockExpected, sampleRate);
+    releaseResources();
+    outputRate = sampleRate;
+    resampler.setResamplingRatio(sourceRate / outputRate);
+    prepared = true;
+    try
+    {
+        resampler.prepareToPlay(blockSize, outputRate);
+    }
+    catch (...)
+    {
+        releaseResources();
+        throw;
+    }
 }
 
 void AudioTrack::releaseResources()
 {
-    transport.releaseResources();
+    if (prepared)
+        resampler.releaseResources();
+    prepared = false;
+    outputRate = 0.0;
+    clearPeaks();
+}
+
+bool AudioTrack::isReady(const int outputSamples)
+{
+    if (! prepared)
+        return false;
+
+    // JUCE's resampler needs up to round(n * ratio) + 3 source samples.
+    // A zero timeout only probes availability; the audio callback never waits
+    // for disk I/O. The engine advances all tracks together, or none of them.
+    const auto required = static_cast<int>(std::ceil(outputSamples * sourceRate / outputRate)) + 4;
+    return bufferedSource.waitForNextAudioBlockReady({ nullptr, 0, required }, 0);
+}
+
+void AudioTrack::clearPeaks() noexcept
+{
+    peakLeft.store(0.0f);
+    peakRight.store(0.0f);
 }
 
 void AudioTrack::getNextAudioBlock(
     const juce::AudioSourceChannelInfo& bufferToFill
 )
 {
-    transport.getNextAudioBlock(bufferToFill);
+    bufferToFill.clearActiveBufferRegion();
+    if (! prepared || bufferToFill.numSamples <= 0)
+        return;
+    resampler.getNextAudioBlock(bufferToFill);
+
+    for (int channel = 0; channel < bufferToFill.buffer->getNumChannels(); ++channel)
+    {
+        auto* samples = bufferToFill.buffer->getWritePointer(channel, bufferToFill.startSample);
+        for (int i = 0; i < bufferToFill.numSamples; ++i)
+            if (! std::isfinite(samples[i])) samples[i] = 0.0f;
+    }
 
     if (muted.load() || soloMuted.load())
     {
@@ -104,41 +145,23 @@ void AudioTrack::getNextAudioBlock(
     }
 }
 
-void AudioTrack::play()
-{
-    if (getLengthSeconds() > 0.0
-        && getPositionSeconds() < getLengthSeconds())
-    {
-        transport.start();
-    }
-}
-
-void AudioTrack::pause()
-{
-    transport.stop();
-}
-
-void AudioTrack::stop()
-{
-    transport.stop();
-    transport.setPosition(0.0);
-}
-
 void AudioTrack::setPositionSeconds(const double seconds)
 {
-    transport.setPosition(
-        juce::jlimit(0.0, getLengthSeconds(), seconds)
-    );
+    const auto position = std::isfinite(seconds)
+        ? juce::jlimit(0.0, lengthSeconds, seconds) : 0.0;
+    bufferedSource.setNextReadPosition(static_cast<juce::int64>(position * sourceRate));
+    resampler.flushBuffers();
+    clearPeaks();
 }
 
 void AudioTrack::setGain(const float newGain)
 {
-    gain.store(juce::jlimit(0.0f, 1.5f, newGain));
+    gain.store(std::isfinite(newGain) ? juce::jlimit(0.0f, 1.5f, newGain) : 1.0f);
 }
 
 void AudioTrack::setPan(const float newPan)
 {
-    pan.store(juce::jlimit(-1.0f, 1.0f, newPan));
+    pan.store(std::isfinite(newPan) ? juce::jlimit(-1.0f, 1.0f, newPan) : 0.0f);
 }
 
 void AudioTrack::setMuted(const bool shouldBeMuted)
@@ -176,11 +199,6 @@ bool AudioTrack::isSolo() const noexcept
     return solo.load();
 }
 
-bool AudioTrack::isPlaying() const
-{
-    return transport.isPlaying();
-}
-
 float AudioTrack::getPeakLeft() const noexcept
 {
     return peakLeft.load();
@@ -191,14 +209,9 @@ float AudioTrack::getPeakRight() const noexcept
     return peakRight.load();
 }
 
-double AudioTrack::getPositionSeconds() const
-{
-    return transport.getCurrentPosition();
-}
-
 double AudioTrack::getLengthSeconds() const
 {
-    return transport.getLengthInSeconds();
+    return lengthSeconds;
 }
 
 const juce::String& AudioTrack::getName() const noexcept

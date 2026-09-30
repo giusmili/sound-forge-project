@@ -14,7 +14,7 @@ public:
 
     const juce::String getApplicationVersion() override
     {
-        return "0.2.2";
+        return "0.2.3";
     }
 
     bool moreThanOneInstanceAllowed() override
@@ -25,6 +25,8 @@ public:
     void initialise(const juce::String&) override
     {
         AppServices::initialise();
+        AppServices::log("SonoForge " + getApplicationVersion() + " | "
+                         + juce::SystemStats::getOperatingSystemName());
         AppServices::log("Creating main window");
         mainWindow =
             std::make_unique<MainWindow>(

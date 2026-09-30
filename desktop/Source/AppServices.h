@@ -5,7 +5,7 @@
 class AppServices final
 {
 public:
-    static void initialise();
+    static void initialise(const juce::File& dataDirectory = {});
     static void shutdown();
 
     static void log(const juce::String& message);
@@ -18,4 +18,5 @@ public:
 
 private:
     static std::unique_ptr<juce::FileLogger> logger;
+    static juce::File dataDirectoryOverride;
 };

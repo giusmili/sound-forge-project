@@ -1,6 +1,7 @@
 name: Desktop Windows Build
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - develop
@@ -18,6 +19,7 @@ on:
 jobs:
   build:
     runs-on: windows-2022
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -29,11 +31,23 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: Audio engine regression tests
+        run: ctest --test-dir build -C Release --output-on-failure --output-junit audio-test-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SonoForge-audio-test-results
+          path: build/audio-test-results.xml
+
       - name: Prepare Windows package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item "build/SonoForge_artefacts/Release/SonoForge Studio.exe" "package/SonoForge Studio.exe"
+          Copy-Item "desktop/Tests/WINDOWS_VALIDATION.md" "package/WINDOWS_VALIDATION.md"
+          $env:GITHUB_SHA | Set-Content -Encoding UTF8 "package/BUILD-COMMIT.txt"
           @"
           SonoForge Studio - Windows diagnostic build
 

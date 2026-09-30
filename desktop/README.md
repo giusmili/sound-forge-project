@@ -1,6 +1,6 @@
 # SonoForge Studio Desktop
 
-SonoForge Studio 0.2C consolide le fonctions de transport et de mixage.
+SonoForge Studio : stabilisation du moteur audio sur `feature/windows-stable-core`.
 
 ## Fonctionnalites actuelles
 
@@ -23,9 +23,11 @@ SonoForge Studio 0.2C consolide le fonctions de transport et de mixage.
 
 Des qu'une piste est en Solo, toutes les pistes non Solo sont silencieuses. Plusieurs pistes peuvent etre mises en Solo simultanement.
 
-## Prochain chantier d'architecture
+## Stabilisation en cours
 
-Le deplacement reel des clips dans le temps demande un transport global avec un offset de debut propre a chaque clip. Cette evolution sera isolee dans une branche dediee afin de ne pas fragiliser le moteur multipiste deja valide.
+Aucune nouvelle fonctionnalité avant validation du moteur sur Windows.
+L'audit est dans [Tests/AUDIO_AUDIT.md](Tests/AUDIO_AUDIT.md) et la recette
+matérielle dans [Tests/WINDOWS_VALIDATION.md](Tests/WINDOWS_VALIDATION.md).
 
 ## Prerequis Windows
 
@@ -53,7 +55,15 @@ JUCE 9.0.2 est distribue sous AGPL-3.0-only ou licence commerciale JUCE. Le choi
 
 ## Build de test Windows
 
-La branche `feature/windows-test-build` est utilisee pour valider automatiquement l'executable Windows x64 avant livraison de test.
+La branche `feature/windows-stable-core` compile le programme et exécute les
+tests du moteur avant de produire le paquet de test Windows.
+
+```powershell
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Les tests utilisent le même moteur avec des fichiers temporaires, sans ouvrir
+de carte son et sans modifier la configuration de l'utilisateur.
 
 
 ## Diagnostic Windows

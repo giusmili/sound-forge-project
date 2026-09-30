@@ -19,7 +19,7 @@ MainComponent::MainComponent()
     setSize(1180, 760);
 
     titleLabel.setText(
-        "SonoForge Studio 0.2C",
+        "SonoForge Studio 0.2.3",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -30,6 +30,9 @@ MainComponent::MainComponent()
         juce::Colour(textColour)
     );
     addAndMakeVisible(titleLabel);
+    audioStatusLabel.setFont(juce::FontOptions(12.0f));
+    audioStatusLabel.setColour(juce::Label::textColourId, juce::Colour(textColour));
+    addAndMakeVisible(audioStatusLabel);
 
     projectLabel.setText(
         "0 piste",
@@ -117,8 +120,7 @@ MainComponent::MainComponent()
 
     mixer.onMasterGainChanged = [this](const float gain)
     {
-        masterSlider.setValue(gain, juce::dontSendNotification);
-        audioEngine.setMasterGain(gain);
+        masterSlider.setValue(gain, juce::sendNotificationSync);
     };
     mixer.onSoloChanged = [this]
     {
@@ -195,6 +197,16 @@ MainComponent::MainComponent()
     startTimerHz(30);
 }
 
+MainComponent::~MainComponent()
+{
+    stopTimer();
+    fileChooser.reset();
+    // The selector holds a reference to the engine's device manager.
+    // Destroy it before the engine, even if the user left the dialog open.
+    if (audioSettingsWindow != nullptr)
+        delete audioSettingsWindow.getComponent();
+}
+
 void MainComponent::paint(juce::Graphics& graphics)
 {
     graphics.fillAll(juce::Colour(backgroundColour));
@@ -215,9 +227,9 @@ void MainComponent::resized()
     auto area = getLocalBounds().reduced(20);
 
     auto header = area.removeFromTop(52);
-    titleLabel.setBounds(
-        header.removeFromLeft(340)
-    );
+    auto titleArea = header.removeFromLeft(juce::jmax(340, header.getWidth() - 220));
+    titleLabel.setBounds(titleArea.removeFromTop(30));
+    audioStatusLabel.setBounds(titleArea);
     audioSettingsButton.setBounds(
         header.removeFromRight(100).reduced(4)
     );
@@ -446,6 +458,11 @@ void MainComponent::seekTo(const double seconds)
 
 void MainComponent::showAudioSettings()
 {
+    if (audioSettingsWindow != nullptr)
+    {
+        audioSettingsWindow->toFront(true);
+        return;
+    }
     auto* selector =
         new juce::AudioDeviceSelectorComponent(
             audioEngine.getDeviceManager(),
@@ -470,11 +487,12 @@ void MainComponent::showAudioSettings()
     options.useNativeTitleBar = true;
     options.resizable = false;
 
-    options.launchAsync();
+    audioSettingsWindow = options.launchAsync();
 }
 
 void MainComponent::timerCallback()
 {
+    audioStatusLabel.setText(audioEngine.getAudioStatus(), juce::dontSendNotification);
     const auto current =
         audioEngine.getPositionSeconds();
 
