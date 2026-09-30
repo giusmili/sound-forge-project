@@ -1,11 +1,14 @@
 #include "AudioEngine.h"
+#include "AppServices.h"
 
 #include <algorithm>
 
 AudioEngine::AudioEngine()
 {
+    AppServices::log("AudioEngine: registering audio formats");
     formatManager.registerBasicFormats();
 
+    AppServices::log("AudioEngine: initialising default output device");
     const auto error = deviceManager.initialise(
         0,
         2,
@@ -13,7 +16,10 @@ AudioEngine::AudioEngine()
         true
     );
 
-    jassert(error.isEmpty());
+    if (error.isNotEmpty())
+        AppServices::log("ERROR AudioEngine initialise: " + error);
+    else
+        AppServices::log("AudioEngine: device initialised");
 
     sourcePlayer.setSource(this);
     deviceManager.addAudioCallback(&sourcePlayer);
@@ -69,6 +75,13 @@ juce::Result AudioEngine::addTrackFromFile(
 )
 {
     createdTrack = nullptr;
+    AppServices::log("Import requested: " + file.getFullPathName());
+
+    if (! file.existsAsFile())
+    {
+        AppServices::log("ERROR import: file does not exist");
+        return juce::Result::fail("Le fichier n'existe pas.");
+    }
 
     std::unique_ptr<juce::AudioFormatReader> reader(
         formatManager.createReaderFor(file)
@@ -110,8 +123,10 @@ juce::Result AudioEngine::addTrackFromFile(
 
     createdTrack = track.get();
     tracks.push_back(std::move(track));
+    AppServices::log("AudioTrack created: " + createdTrack->getName());
 
     mixer.addInputSource(createdTrack, false);
+    AppServices::log("AudioTrack added to mixer");
     refreshSoloState();
 
     deviceManager.addAudioCallback(&sourcePlayer);
