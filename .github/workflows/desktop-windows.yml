@@ -29,9 +29,30 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
-      - name: Upload executable
+      - name: Prepare Windows package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item "build/SonoForge_artefacts/Release/SonoForge Studio.exe" "package/SonoForge Studio.exe"
+          @"
+          SonoForge Studio - Windows diagnostic build
+
+          This build creates its writable user files on first launch in:
+          %APPDATA%\SonoForge
+
+          Configuration:
+          %APPDATA%\SonoForge\config\settings.json
+
+          Diagnostic log:
+          %APPDATA%\SonoForge\logs\sonoforge.log
+
+          If the application closes during audio import, keep sonoforge.log.
+          It records the last completed import and audio-engine step.
+          "@ | Set-Content -Encoding UTF8 "package/README-DIAGNOSTIC.txt"
+
+      - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
           name: SonoForge-Windows
-          path: "build/SonoForge_artefacts/Release/SonoForge Studio.exe"
+          path: package/**
           if-no-files-found: error
