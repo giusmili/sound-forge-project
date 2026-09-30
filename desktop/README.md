@@ -49,3 +49,8 @@ cmake --build build --config Release --parallel
 ## Licence JUCE
 
 JUCE 9.0.2 est distribue sous AGPL-3.0-only ou licence commerciale JUCE. Le choix de licence devra etre tranche avant toute distribution du logiciel.
+
+
+## Build de test Windows
+
+La branche `feature/windows-test-build` est utilisee pour valider automatiquement l'executable Windows x64 avant livraison de test.
