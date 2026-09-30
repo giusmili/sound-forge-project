@@ -48,7 +48,9 @@
           Importer audio
           <input id="fileInput" type="file" accept="audio/*" multiple hidden />
         </label>
-        <button id="addEmptyTrackBtn">Ajouter piste vide</button>
+        <button id="addEmptyTrackBtn">Ajouter piste audio</button>
+        <button id="addMidiTrackBtn">Ajouter piste MIDI</button>
+        <button id="mixerBtn">Mixer</button>
         <button id="exportBtn">Exporter le mix WAV</button>
       </div>
       <div class="toolbar-group zoom-group">
@@ -92,6 +94,16 @@
           Dépose ici des fichiers audio WAV, MP3, M4A, OGG ou FLAC pris en charge par ton navigateur.
         </div>
       </section>
+
+      <section id="mixerPanel" class="mixer-panel" hidden>
+        <div class="mixer-head"><h2>Console de mixage</h2><button id="closeMixerBtn">Fermer</button></div>
+        <div id="mixerChannels" class="mixer-channels"></div>
+      </section>
+
+      <section id="scorePanel" class="score-panel" hidden>
+        <div class="mixer-head"><h2 id="scoreTitle">Partition MIDI</h2><button id="closeScoreBtn">Fermer</button></div>
+        <div id="scoreCanvas" class="score-canvas"></div>
+      </section>
     </main>
 
     <footer class="footer">
@@ -109,6 +121,7 @@
         <div class="buttons-row">
           <button class="mute-btn">M</button>
           <button class="solo-btn">S</button>
+          <button class="score-btn" hidden>Partition</button>
         </div>
         <label>Volume
           <input class="volume-slider" type="range" min="0" max="1.5" step="0.01" value="1" />
