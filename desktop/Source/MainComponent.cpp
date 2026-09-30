@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "AppServices.h"
 
 #include <cmath>
 
@@ -13,6 +14,7 @@ constexpr int trackRowHeight = 112;
 
 MainComponent::MainComponent()
 {
+    AppServices::log("MainComponent constructed");
     setOpaque(true);
     setSize(1180, 760);
 
@@ -285,6 +287,7 @@ void MainComponent::openAudioFiles()
                 return;
 
             const auto files = chooser.getResults();
+            AppServices::log("File chooser returned " + juce::String(files.size()) + " file(s)");
 
             for (const auto& file : files)
             {
@@ -302,7 +305,9 @@ void MainComponent::openAudioFiles()
                 if (result.wasOk()
                     && createdTrack != nullptr)
                 {
+                    AppServices::log("UI: adding track row");
                     safeThis->addTrackRow(*createdTrack);
+                    AppServices::log("UI: track row added");
                 }
                 else
                 {
