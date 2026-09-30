@@ -167,12 +167,31 @@ MainComponent::MainComponent()
         const auto gain = static_cast<float>(masterSlider.getValue());
         audioEngine.setMasterGain(gain);
         mixer.setMasterGain(gain);
+
+        auto settings = AppServices::loadSettings();
+        if (auto* object = settings.getDynamicObject())
+        {
+            object->setProperty("masterGain", gain);
+            AppServices::saveSettings(settings);
+        }
     };
+
+    const auto settings = AppServices::loadSettings();
+    if (auto* object = settings.getDynamicObject())
+    {
+        const auto savedGain = static_cast<double>(object->getProperty("masterGain"));
+        if (savedGain >= 0.0 && savedGain <= 1.0)
+            masterSlider.setValue(savedGain, juce::dontSendNotification);
+    }
 
     audioEngine.setMasterGain(
         static_cast<float>(masterSlider.getValue())
     );
+    mixer.setMasterGain(
+        static_cast<float>(masterSlider.getValue())
+    );
 
+    AppServices::log("MainComponent ready");
     startTimerHz(30);
 }
 
