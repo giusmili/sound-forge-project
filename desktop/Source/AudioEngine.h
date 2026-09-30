@@ -26,6 +26,7 @@ public:
     void refreshSoloState();
 
     [[nodiscard]] bool isPlaying() const;
+    [[nodiscard]] bool canPlay() const;
     [[nodiscard]] double getPositionSeconds() const;
     [[nodiscard]] double getLengthSeconds() const;
     [[nodiscard]] int getTrackCount() const noexcept;
@@ -56,6 +57,7 @@ private:
     bool prepared = false;
     bool playing = false;
     bool deviceOpened = false;
+    bool deviceAvailable = false;
     juce::String audioStatus;
     juce::String preparationError;
 

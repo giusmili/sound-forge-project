@@ -67,9 +67,11 @@ void testImportAndTransport(const juce::File& mono, const juce::File& stereo, co
     AudioEngine engine(false);
     auto& first = import(engine, mono); // Import without a device must work.
     near(first.getLengthSeconds(), 2.0, 1e-9, "duration available without a device");
+    check(! engine.canPlay(), "play control disabled without a prepared output");
     engine.play();
     check(! engine.isPlaying(), "play without a prepared device stays stopped");
     engine.prepareToPlay(256, 48000.0); // Used to crash: null read-ahead thread.
+    check(engine.canPlay(), "play control enabled for a prepared nonempty session");
     auto& second = import(engine, stereo);
     check(engine.getTrackCount() == 2, "multiple imports");
     engine.setMasterGain(1.0f);

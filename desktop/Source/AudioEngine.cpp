@@ -244,7 +244,7 @@ juce::Result AudioEngine::addTrackFromFile(const juce::File& file, AudioTrack*& 
 void AudioEngine::play()
 {
     const juce::ScopedLock lock(stateLock);
-    if (! prepared || lengthSeconds <= 0.0)
+    if (! canPlay())
         return;
     if (positionSeconds >= lengthSeconds)
         seekLocked(0.0);
@@ -309,6 +309,12 @@ bool AudioEngine::isPlaying() const
     return playing;
 }
 
+bool AudioEngine::canPlay() const
+{
+    const juce::ScopedLock lock(stateLock);
+    return prepared && lengthSeconds > 0.0 && (! deviceOpened || deviceAvailable);
+}
+
 double AudioEngine::getPositionSeconds() const
 {
     const juce::ScopedLock lock(stateLock);
@@ -348,8 +354,13 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster*)
 {
     // AudioDeviceManager change notifications run on the message thread.
     auto* device = deviceManager->getCurrentAudioDevice();
-    if (device == nullptr || ! device->isOpen() || ! device->isPlaying()
-        || device->getActiveOutputChannels().isZero())
+    const auto available = device != nullptr && device->isOpen() && device->isPlaying()
+        && ! device->getActiveOutputChannels().isZero();
+    {
+        const juce::ScopedLock lock(stateLock);
+        deviceAvailable = available;
+    }
+    if (! available)
     {
         pause();
         audioStatus = "Audio indisponible. Ouvrez Configuration audio.";

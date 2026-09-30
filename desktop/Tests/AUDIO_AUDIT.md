@@ -46,6 +46,7 @@ configuration, destruction de l'interface et validation Windows.
 - Import validé avant publication de la piste, échec journalisé et session
   existante conservée pour les erreurs de décodage initial/d'allocation traitées.
   Import réussi : arrêt et retour à zéro, comportement explicite.
+- Play désactivé sans sortie utilisable ; le sélecteur exige au moins un canal de sortie.
 - Configuration atomique, récupération du JSON invalide, persistance et
   restauration du périphérique et du Master ; fermeture possédée du dialogue.
 - Tests du moteur intégrés à CTest et obligatoires avant empaquetage Windows.
@@ -66,7 +67,7 @@ Les fonctionnalités MIDI, partition et autres extensions restent hors périmèt
 - Reproduction isolée de l'appel d'import d'origine avec JUCE 9.0.2 :
   assertion sur le thread nul, puis erreur mémoire (signal SIGSEGV sous Linux).
 - Application et tests compilés en Debug avec GCC 13 / JUCE 9.0.2.
-- 167 vérifications réussies : transport, import avant/après préparation,
+- 169 vérifications réussies : transport, import avant/après préparation,
   fréquences différentes, durées différentes, reprise après EOF, volumes/pan,
   Mute/Solo, sortie mono, offsets de buffer, formats WAV/AIFF/FLAC/OGG/MP3,
   forme d'onde en arrière-plan, réglages invalides et récupération du JSON.

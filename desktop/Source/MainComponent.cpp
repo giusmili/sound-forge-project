@@ -468,7 +468,7 @@ void MainComponent::showAudioSettings()
             audioEngine.getDeviceManager(),
             0,
             0,
-            0,
+            1,
             2,
             false,
             false,
@@ -493,6 +493,7 @@ void MainComponent::showAudioSettings()
 void MainComponent::timerCallback()
 {
     audioStatusLabel.setText(audioEngine.getAudioStatus(), juce::dontSendNotification);
+    playButton.setEnabled(audioEngine.canPlay());
     const auto current =
         audioEngine.getPositionSeconds();
 
