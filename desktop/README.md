@@ -54,3 +54,13 @@ JUCE 9.0.2 est distribue sous AGPL-3.0-only ou licence commerciale JUCE. Le choi
 ## Build de test Windows
 
 La branche `feature/windows-test-build` est utilisee pour valider automatiquement l'executable Windows x64 avant livraison de test.
+
+
+## Diagnostic Windows
+
+La branche stable-core cree automatiquement les donnees utilisateur dans le dossier d'application Windows de l'utilisateur :
+
+- config/settings.json : preferences persistantes et valeurs audio
+- logs/sonoforge.log : journal de demarrage, initialisation audio et import de pistes
+
+Ces fichiers sont crees au premier lancement et permettent de diagnostiquer un echec d'import sans modifier l'executable.
