@@ -1,6 +1,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 
 #include "MainComponent.h"
+#include "AppServices.h"
 
 class SonoForgeApplication final
     : public juce::JUCEApplication
@@ -23,6 +24,8 @@ public:
 
     void initialise(const juce::String&) override
     {
+        AppServices::initialise();
+        AppServices::log("Creating SonoForge 0.8 main window");
         mainWindow =
             std::make_unique<MainWindow>(
                 getApplicationName()
@@ -31,7 +34,9 @@ public:
 
     void shutdown() override
     {
+        AppServices::log("Closing SonoForge main window");
         mainWindow.reset();
+        AppServices::shutdown();
     }
 
     void systemRequestedQuit() override
