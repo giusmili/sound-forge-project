@@ -5,6 +5,7 @@ on:
     branches:
       - develop
       - "feature/**"
+      - "recovery/**"
     paths:
       - "desktop/**"
       - ".github/workflows/desktop-windows.yml"
@@ -36,12 +37,12 @@ jobs:
           Copy-Item "build/SonoForge_artefacts/Release/SonoForge Studio.exe" "package/SonoForge Studio.exe"
           Copy-Item "desktop/TESTING.md" "package/TESTING.md"
           @"
-          SonoForge Studio 0.7.0
+          SonoForge Studio 0.8.0
           Commit: $env:GITHUB_SHA
           Platform: Windows x64
           Build: Release
           "@ | Set-Content -Encoding UTF8 "package/BUILD_INFO.txt"
-          Compress-Archive -Path "package/*" -DestinationPath "SonoForge-Studio-Windows-0.7.0.zip" -Force
+          Compress-Archive -Path "package/*" -DestinationPath "SonoForge-Studio-Windows-0.8.0.zip" -Force
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
@@ -53,6 +54,6 @@ jobs:
       - name: Upload test package
         uses: actions/upload-artifact@v4
         with:
-          name: SonoForge-Studio-Windows-0.7.0
-          path: "SonoForge-Studio-Windows-0.7.0.zip"
+          name: SonoForge-Studio-Windows-0.8.0
+          path: "SonoForge-Studio-Windows-0.8.0.zip"
           if-no-files-found: error
