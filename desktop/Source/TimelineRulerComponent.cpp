@@ -16,7 +16,7 @@ void TimelineRulerComponent::paint(juce::Graphics& graphics)
     graphics.fillAll(juce::Colour(backgroundColour));
 
     const auto bounds = getLocalBounds();
-    const auto timeline = bounds.withTrimmedLeft(controlsWidth);
+    const auto timeline = getTimelineBounds();
 
     graphics.setColour(juce::Colour(separatorColour));
     graphics.drawVerticalLine(
@@ -25,8 +25,15 @@ void TimelineRulerComponent::paint(juce::Graphics& graphics)
         static_cast<float>(getHeight())
     );
 
+    graphics.setColour(juce::Colour(separatorColour));
+    graphics.drawHorizontalLine(
+        getHeight() - 1,
+        0.0f,
+        static_cast<float>(getWidth())
+    );
+
     graphics.setColour(juce::Colour(textColour));
-    graphics.setFont(11.0f);
+    graphics.setFont(juce::FontOptions(12.0f, juce::Font::bold));
     graphics.drawText(
         "TIMELINE",
         bounds.withWidth(controlsWidth).reduced(10, 0),
@@ -75,47 +82,60 @@ void TimelineRulerComponent::paint(juce::Graphics& graphics)
     }
 
     const auto interval = chooseTickInterval();
+    const auto minorInterval = interval / 5.0;
+    const auto height = static_cast<float>(getHeight());
 
-    auto firstTick =
-        std::floor(viewStart / interval) * interval;
+    const auto toX = [&](const double seconds)
+    {
+        return timeline.getX()
+            + static_cast<int>(
+                std::round(
+                    (seconds - viewStart) / viewDuration
+                    * timeline.getWidth()
+                )
+            );
+    };
 
-    if (firstTick < 0.0)
-        firstTick = 0.0;
+    graphics.saveState();
+    graphics.reduceClipRegion(timeline.withTop(0));
 
-    for (double second = firstTick;
+    graphics.setColour(juce::Colour(separatorColour));
+
+    for (double second = std::floor(viewStart / minorInterval) * minorInterval;
+         second <= viewEnd + 0.001;
+         second += minorInterval)
+    {
+        if (second < viewStart - 0.001 || second > projectLength + 0.001)
+            continue;
+
+        graphics.drawVerticalLine(toX(second), height - 7.0f, height - 1.0f);
+    }
+
+    for (double second = std::floor(viewStart / interval) * interval;
          second <= viewEnd + 0.001;
          second += interval)
     {
-        if (second < viewStart - 0.001)
+        if (second < viewStart - 0.001 || second > projectLength + 0.001)
             continue;
 
-        const auto ratio =
-            (second - viewStart) / viewDuration;
-
-        const auto x = timeline.getX()
-            + static_cast<int>(
-                std::round(
-                    ratio * timeline.getWidth()
-                )
-            );
+        const auto x = toX(second);
 
         graphics.setColour(juce::Colour(separatorColour));
-        graphics.drawVerticalLine(
-            x,
-            15.0f,
-            static_cast<float>(getHeight())
-        );
+        graphics.drawVerticalLine(x, 14.0f, height);
 
         graphics.setColour(juce::Colour(textColour));
+        graphics.setFont(12.0f);
         graphics.drawText(
             formatTick(second),
             x + 4,
             1,
-            58,
-            15,
+            64,
+            16,
             juce::Justification::centredLeft
         );
     }
+
+    graphics.restoreState();
 
     if (position < viewStart || position > viewEnd)
         return;
@@ -149,25 +169,23 @@ void TimelineRulerComponent::mouseDown(
     const juce::MouseEvent& event
 )
 {
+    const auto timeline = getTimelineBounds();
+
     if (projectLength <= 0.0
         || viewDuration <= 0.0
-        || event.position.x < static_cast<float>(controlsWidth))
+        || timeline.getWidth() <= 0
+        || event.position.x < static_cast<float>(timeline.getX()))
     {
         return;
     }
-
-    const auto usableWidth = getWidth() - controlsWidth;
-
-    if (usableWidth <= 0)
-        return;
 
     const auto ratio = juce::jlimit(
         0.0,
         1.0,
         static_cast<double>(
-            event.position.x - static_cast<float>(controlsWidth)
+            event.position.x - static_cast<float>(timeline.getX())
         )
-            / static_cast<double>(usableWidth)
+            / static_cast<double>(timeline.getWidth())
     );
 
     const auto requestedPosition = juce::jlimit(
@@ -178,6 +196,20 @@ void TimelineRulerComponent::mouseDown(
 
     if (onSeek)
         onSeek(requestedPosition);
+}
+
+void TimelineRulerComponent::mouseDrag(
+    const juce::MouseEvent& event
+)
+{
+    mouseDown(event);
+}
+
+juce::Rectangle<int> TimelineRulerComponent::getTimelineBounds() const
+{
+    return getLocalBounds()
+        .withTrimmedLeft(controlsWidth)
+        .reduced(timelineInset, 0);
 }
 
 void TimelineRulerComponent::setView(
@@ -233,13 +265,19 @@ juce::String TimelineRulerComponent::formatTick(
     const auto minutes = totalSeconds / 60;
     const auto remainingSeconds = totalSeconds % 60;
 
+    const auto hasHalf = std::abs(seconds - std::floor(seconds)) > 0.25;
+
     return juce::String(minutes).paddedLeft('0', 2)
         + ":"
-        + juce::String(remainingSeconds).paddedLeft('0', 2);
+        + juce::String(remainingSeconds).paddedLeft('0', 2)
+        + (hasHalf ? ".5" : "");
 }
 
 double TimelineRulerComponent::chooseTickInterval() const
 {
+    if (viewDuration <= 3.0)
+        return 0.5;
+
     if (viewDuration <= 10.0)
         return 1.0;
 

@@ -445,6 +445,13 @@ void MixerPanelComponent::resized()
     layoutStrips();
 }
 
+void MixerPanelComponent::clearTrackStrips()
+{
+    strips.clear(true);
+    cachedAudioTracks.clear();
+    cachedMidiTracks.clear();
+}
+
 void MixerPanelComponent::syncWithEngine()
 {
     auto audioTracks = engine.getTrackPointers();

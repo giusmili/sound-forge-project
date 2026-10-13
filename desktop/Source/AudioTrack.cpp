@@ -6,7 +6,8 @@ AudioTrack::AudioTrack(
     juce::File sourceFile,
     juce::String trackName,
     std::unique_ptr<juce::AudioFormatReaderSource> source,
-    const double sourceSampleRate
+    const double sourceSampleRate,
+    juce::TimeSliceThread& readAheadThread
 )
     : file(std::move(sourceFile)),
       name(std::move(trackName)),
@@ -15,7 +16,7 @@ AudioTrack::AudioTrack(
     transport.setSource(
         readerSource.get(),
         32768,
-        nullptr,
+        &readAheadThread,
         sourceSampleRate
     );
 

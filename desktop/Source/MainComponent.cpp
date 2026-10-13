@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "AppServices.h"
 
 #include <cmath>
 
@@ -9,7 +10,8 @@ constexpr auto panelColour = 0xff1b1f26;
 constexpr auto accentColour = 0xff5aa9ff;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto snapColour = 0xff3d8f68;
-constexpr int trackRowHeight = 112;
+constexpr int trackRowHeight = 128;
+constexpr int scrollBarWidth = 14;
 constexpr double minimumSplitMarginSeconds = 0.01;
 constexpr auto maxHistoryEntries = 50U;
 constexpr double autosaveIntervalMs = 30000.0;
@@ -31,11 +33,12 @@ MainComponent::MainComponent()
 {
     setOpaque(true);
     setSize(1320, 860);
+    setWantsKeyboardFocus(true);
 
     addAndMakeVisible(menuBar);
 
     titleLabel.setText(
-        "SonoForge Studio 0.8",
+        "SonoForge Studio 0.8.2",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -108,6 +111,9 @@ MainComponent::MainComponent()
              &snapButton
          })
     {
+        // Keep the keyboard free for shortcuts (Space = play/pause):
+        // a focused button would otherwise swallow the space bar.
+        button->setWantsKeyboardFocus(false);
         button->setColour(
             juce::TextButton::buttonColourId,
             juce::Colour(panelColour)
@@ -136,6 +142,7 @@ MainComponent::MainComponent()
         1,
         juce::dontSendNotification
     );
+    gridCombo.setWantsKeyboardFocus(false);
     addAndMakeVisible(gridCombo);
 
     recentProjectsCombo.setTextWhenNothingSelected(
@@ -166,6 +173,7 @@ MainComponent::MainComponent()
             );
         }
     };
+    recentProjectsCombo.setWantsKeyboardFocus(false);
     addAndMakeVisible(recentProjectsCombo);
 
     masterSlider.setRange(0.0, 1.0, 0.01);
@@ -232,6 +240,7 @@ MainComponent::MainComponent()
 
     trackViewport.setViewedComponent(&trackList, false);
     trackViewport.setScrollBarsShown(true, false);
+    trackViewport.setScrollBarThickness(scrollBarWidth);
     addAndMakeVisible(trackViewport);
 
     mixerButton.setClickingTogglesState(true);
@@ -457,9 +466,6 @@ void MainComponent::resized()
     area.removeFromTop(4);
 
     auto header = area.removeFromTop(52);
-    titleLabel.setBounds(
-        header.removeFromLeft(360)
-    );
     quitButton.setBounds(
         header.removeFromRight(82).reduced(4)
     );
@@ -469,6 +475,7 @@ void MainComponent::resized()
     recentProjectsCombo.setBounds(
         header.removeFromRight(240).reduced(4)
     );
+    titleLabel.setBounds(header);
 
     area.removeFromTop(24);
     area.reduce(18, 18);
@@ -589,7 +596,7 @@ void MainComponent::resized()
     area.removeFromTop(6);
 
     timelineRuler.setBounds(
-        area.removeFromTop(34)
+        area.removeFromTop(40).withTrimmedRight(scrollBarWidth)
     );
 
     area.removeFromTop(2);
@@ -744,9 +751,71 @@ void MainComponent::requestApplicationQuit(
     std::function<void()> quitCallback
 )
 {
+    AppServices::log("Quit requested (unsaved changes: "
+                     + juce::String(hasUnsavedChanges() ? "yes" : "no") + ")");
     confirmSaveBeforeAction(
         std::move(quitCallback)
     );
+}
+
+void MainComponent::importAudioFiles(const juce::Array<juce::File>& files)
+{
+    AppServices::log(
+        "Import: " + juce::String(files.size()) + " file(s) selected"
+    );
+
+    const auto before =
+        captureSnapshot();
+
+    bool projectChanged = false;
+    TrackRowComponent* lastAdded = nullptr;
+
+    for (const auto& file : files)
+    {
+        if (! file.existsAsFile())
+            continue;
+
+        AudioTrack* createdTrack = nullptr;
+        AppServices::log("Import: loading " + file.getFullPathName());
+
+        const auto result =
+            audioEngine.addTrackFromFile(
+                file,
+                createdTrack
+            );
+        AppServices::log(
+            result.wasOk()
+                ? "Import: engine OK, creating track row"
+                : "Import: engine failed - " + result.getErrorMessage()
+        );
+
+        if (result.wasOk()
+            && createdTrack != nullptr)
+        {
+            lastAdded =
+                addTrackRow(*createdTrack);
+            AppServices::log("Import: track row created");
+            projectChanged = true;
+        }
+        else
+        {
+            juce::AlertWindow::showMessageBoxAsync(
+                juce::MessageBoxIconType::WarningIcon,
+                "Import audio impossible",
+                file.getFileName()
+                    + "\n\n"
+                    + result.getErrorMessage()
+            );
+        }
+    }
+
+    if (lastAdded != nullptr)
+        selectRow(lastAdded);
+
+    if (projectChanged)
+        pushUndoSnapshot(before);
+
+    updateProjectState();
 }
 
 void MainComponent::openAudioFiles()
@@ -769,53 +838,7 @@ void MainComponent::openAudioFiles()
             if (safeThis == nullptr)
                 return;
 
-            const auto files = chooser.getResults();
-
-            const auto before =
-                safeThis->captureSnapshot();
-
-            bool projectChanged = false;
-            TrackRowComponent* lastAdded = nullptr;
-
-            for (const auto& file : files)
-            {
-                if (! file.existsAsFile())
-                    continue;
-
-                AudioTrack* createdTrack = nullptr;
-
-                const auto result =
-                    safeThis->audioEngine.addTrackFromFile(
-                        file,
-                        createdTrack
-                    );
-
-                if (result.wasOk()
-                    && createdTrack != nullptr)
-                {
-                    lastAdded =
-                        safeThis->addTrackRow(*createdTrack);
-                    projectChanged = true;
-                }
-                else
-                {
-                    juce::AlertWindow::showMessageBoxAsync(
-                        juce::MessageBoxIconType::WarningIcon,
-                        "Import audio impossible",
-                        file.getFileName()
-                            + "\n\n"
-                            + result.getErrorMessage()
-                    );
-                }
-            }
-
-            if (lastAdded != nullptr)
-                safeThis->selectRow(lastAdded);
-
-            if (projectChanged)
-                safeThis->pushUndoSnapshot(before);
-
-            safeThis->updateProjectState();
+            safeThis->importAudioFiles(chooser.getResults());
         }
     );
 }
@@ -1348,7 +1371,7 @@ juce::var MainComponent::serialiseSnapshot(
 
     root->setProperty("format", "SonoForgeProject");
     root->setProperty("formatVersion", 2);
-    root->setProperty("appVersion", "0.8.0");
+    root->setProperty("appVersion", "0.8.2");
     root->setProperty(
         "positionSeconds",
         snapshot.positionSeconds
@@ -1664,7 +1687,7 @@ juce::Result MainComponent::deserialiseSnapshot(
 
 void MainComponent::updateProjectTitle()
 {
-    auto text = juce::String("SonoForge Studio 0.8");
+    auto text = juce::String("SonoForge Studio 0.8.2");
 
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
@@ -1893,7 +1916,14 @@ MainComponent::addMidiTrackRow(
     row->onDeleteRequested =
         [this](MidiTrackRowComponent* rowToDelete)
         {
-            deleteMidiTrackRow(rowToDelete);
+            // Let the button callback finish before destroying its row.
+            auto safeThis = juce::Component::SafePointer<MainComponent>(this);
+            auto safeRow = juce::Component::SafePointer<MidiTrackRowComponent>(rowToDelete);
+            juce::MessageManager::callAsync([safeThis, safeRow]
+            {
+                if (safeThis != nullptr && safeRow != nullptr)
+                    safeThis->deleteMidiTrackRow(safeRow.getComponent());
+            });
         };
 
     trackList.addAndMakeVisible(row);
@@ -1938,10 +1968,15 @@ void MainComponent::deleteMidiTrackRow(
     const auto before = captureSnapshot();
     auto* track = &row->getTrack();
 
-    if (! audioEngine.removeMidiInstrumentTrack(track))
-        return;
-
+    // The row destructor stops notes on its track. Destroy the UI first.
+    mixerPanel.clearTrackStrips();
     midiTrackRows.removeObject(row, true);
+    if (! audioEngine.removeMidiInstrumentTrack(track))
+    {
+        rebuildTrackRowsFromEngine();
+        updateProjectState();
+        return;
+    }
     pushUndoSnapshot(before);
     updateProjectState();
 }
@@ -1949,7 +1984,7 @@ void MainComponent::deleteMidiTrackRow(
 void MainComponent::layoutTracks()
 {
     const auto width =
-        juce::jmax(500, trackViewport.getWidth() - 14);
+        juce::jmax(500, trackViewport.getWidth() - scrollBarWidth);
 
     const auto height =
         juce::jmax(
@@ -2196,6 +2231,7 @@ void MainComponent::deleteSelectedClip()
                 return;
 
             safeThis->selectedRow = nullptr;
+            safeThis->mixerPanel.clearTrackStrips();
             safeThis->trackRows.removeObject(
                 rowToDelete,
                 true
@@ -2272,6 +2308,13 @@ bool MainComponent::restoreSnapshot(
 {
     audioEngine.pause();
 
+    // Rows and mixer strips hold references to the current engine tracks.
+    // Stop their timers and destroy them while those tracks are still alive.
+    selectedRow = nullptr;
+    mixerPanel.clearTrackStrips();
+    trackRows.clear(true);
+    midiTrackRows.clear(true);
+
     const auto result =
         audioEngine.restoreProjectTracks(
             snapshot.tracks,
@@ -2280,6 +2323,9 @@ bool MainComponent::restoreSnapshot(
 
     if (result.failed())
     {
+        // The engine preserves the old tracks if restoration fails.
+        rebuildTrackRowsFromEngine();
+        updateProjectState();
         juce::AlertWindow::showMessageBoxAsync(
             juce::MessageBoxIconType::WarningIcon,
             "Restauration impossible",
@@ -2662,8 +2708,38 @@ void MainComponent::showAudioSettings()
     options.launchAsync();
 }
 
+bool MainComponent::keyPressed(const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress::spaceKey)
+    {
+        if (audioEngine.isRecording())
+            return true;
+
+        if (audioEngine.isPlaying())
+        {
+            pauseButton.triggerClick();
+            return true;
+        }
+
+        if (playButton.isEnabled())
+        {
+            playButton.triggerClick();
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void MainComponent::timerCallback()
 {
+    if (juce::Component::getCurrentlyFocusedComponent() == nullptr
+        && isShowing()
+        && juce::Process::isForegroundProcess())
+    {
+        grabKeyboardFocus();
+    }
+
     const auto current =
         audioEngine.getPositionSeconds();
 

@@ -117,6 +117,8 @@ private:
     juce::AudioFormatManager formatManager;
     juce::AudioThumbnailCache thumbnailCache { 64 };
     juce::MixerAudioSource mixer;
+    // Declared before tracks so it outlives every buffering source.
+    juce::TimeSliceThread playbackThread { "SonoForge Playback" };
     std::vector<std::unique_ptr<AudioTrack>> tracks;
     std::vector<std::unique_ptr<MidiInstrumentTrack>> midiTracks;
 

@@ -5,6 +5,7 @@
 AudioEngine::AudioEngine()
 {
     formatManager.registerBasicFormats();
+    playbackThread.startThread();
     recordingThread.startThread();
 
     auto error = deviceManager.initialise(
@@ -42,6 +43,7 @@ AudioEngine::~AudioEngine()
     mixer.removeAllInputs();
     tracks.clear();
     midiTracks.clear();
+    playbackThread.stopThread(2000);
 }
 
 void AudioEngine::audioDeviceIOCallbackWithContext(
@@ -231,7 +233,8 @@ juce::Result AudioEngine::addTrackFromFile(
         file,
         file.getFileNameWithoutExtension(),
         std::move(readerSource),
-        sourceSampleRate
+        sourceSampleRate,
+        playbackThread
     );
 
     const juce::ScopedLock lock(trackLock);
@@ -534,7 +537,8 @@ juce::Result AudioEngine::restoreProjectTracks(
             state.sourceFile,
             state.sourceFile.getFileNameWithoutExtension(),
             std::move(readerSource),
-            sourceSampleRate
+            sourceSampleRate,
+            playbackThread
         );
 
         track->setStartOffsetSeconds(

@@ -15,6 +15,7 @@ constexpr auto trimHandleColour = 0xffffd66b;
 constexpr auto waveformColour = 0xff81c7ff;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto accentColour = 0xff5aa9ff;
+constexpr auto panColour = 0xff7fd6a8;
 constexpr auto muteColour = 0xffd65454;
 constexpr auto soloColour = 0xffd4a62a;
 constexpr auto playheadColour = 0xffffb347;
@@ -56,6 +57,7 @@ TrackRowComponent::TrackRowComponent(
     addAndMakeVisible(volumeLabel);
 
     panLabel.setText("Pan", juce::dontSendNotification);
+    panLabel.setTooltip("Panoramique gauche / droite");
     panLabel.setColour(
         juce::Label::textColourId,
         juce::Colour(textColour).withAlpha(0.75f)
@@ -113,6 +115,35 @@ TrackRowComponent::TrackRowComponent(
         52,
         22
     );
+    panSlider.setColour(
+        juce::Slider::trackColourId,
+        juce::Colour(panColour)
+    );
+    panSlider.setDoubleClickReturnValue(true, 0.0);
+    panSlider.setPopupDisplayEnabled(true, true, nullptr);
+    panSlider.setTooltip("Panoramique - double-clic pour recentrer");
+    panSlider.textFromValueFunction = [](const double value)
+    {
+        const auto percent = static_cast<int>(std::round(std::abs(value) * 100.0));
+
+        if (percent == 0)
+            return juce::String("C");
+
+        return (value < 0.0 ? "G " : "D ") + juce::String(percent);
+    };
+    panSlider.valueFromTextFunction = [](const juce::String& text)
+    {
+        const auto trimmed = text.trim().toUpperCase();
+
+        if (trimmed.startsWithChar('C'))
+            return 0.0;
+
+        const auto amount = trimmed.retainCharacters("0123456789.").getDoubleValue() / 100.0;
+        const auto left = trimmed.startsWithChar('G') || trimmed.startsWithChar('L')
+            || trimmed.startsWithChar('-');
+
+        return juce::jlimit(-1.0, 1.0, left ? -amount : amount);
+    };
     panSlider.onValueChange = [this]
     {
         track.setPan(
@@ -312,13 +343,13 @@ void TrackRowComponent::resized()
         .withWidth(
             TimelineRulerComponent::controlsWidth
         )
-        .reduced(10, 8);
+        .reduced(10, 6);
 
     nameLabel.setBounds(
-        controls.removeFromTop(26)
+        controls.removeFromTop(24)
     );
 
-    auto buttons = controls.removeFromTop(28);
+    auto buttons = controls.removeFromTop(26);
     muteButton.setBounds(
         buttons.removeFromLeft(46)
     );
@@ -327,15 +358,17 @@ void TrackRowComponent::resized()
         buttons.removeFromLeft(46)
     );
 
-    controls.removeFromTop(2);
+    controls.removeFromTop(4);
 
-    auto volumeArea = controls.removeFromTop(26);
+    auto volumeArea = controls.removeFromTop(24);
     volumeLabel.setBounds(
         volumeArea.removeFromLeft(34)
     );
     volumeSlider.setBounds(volumeArea);
 
-    auto panArea = controls.removeFromTop(26);
+    controls.removeFromTop(2);
+
+    auto panArea = controls.removeFromTop(24);
     panLabel.setBounds(
         panArea.removeFromLeft(34)
     );

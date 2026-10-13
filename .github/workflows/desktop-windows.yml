@@ -6,6 +6,7 @@ on:
       - develop
       - "feature/**"
       - "recovery/**"
+      - "fix/**"
     paths:
       - "desktop/**"
       - ".github/workflows/desktop-windows.yml"
@@ -28,7 +29,13 @@ jobs:
         run: cmake -S desktop -B build -G "Visual Studio 17 2022" -A x64
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        shell: pwsh
+        run: |
+          $env:_CL_ = "/MP2"
+          cmake --build build --config Release --parallel 1
+
+      - name: Test MIDI stability and audio
+        run: ctest --test-dir build -C Release --output-on-failure
 
       - name: Prepare test package
         shell: pwsh
@@ -37,12 +44,12 @@ jobs:
           Copy-Item "build/SonoForge_artefacts/Release/SonoForge Studio.exe" "package/SonoForge Studio.exe"
           Copy-Item "desktop/TESTING.md" "package/TESTING.md"
           @"
-          SonoForge Studio 0.8.0
+          SonoForge Studio 0.8.2
           Commit: $env:GITHUB_SHA
           Platform: Windows x64
           Build: Release
           "@ | Set-Content -Encoding UTF8 "package/BUILD_INFO.txt"
-          Compress-Archive -Path "package/*" -DestinationPath "SonoForge-Studio-Windows-0.8.0.zip" -Force
+          Compress-Archive -Path "package/*" -DestinationPath "SonoForge-Studio-Windows-0.8.2.zip" -Force
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
@@ -54,6 +61,6 @@ jobs:
       - name: Upload test package
         uses: actions/upload-artifact@v4
         with:
-          name: SonoForge-Studio-Windows-0.8.0
-          path: "SonoForge-Studio-Windows-0.8.0.zip"
+          name: SonoForge-Studio-Windows-0.8.2
+          path: "SonoForge-Studio-Windows-0.8.2.zip"
           if-no-files-found: error

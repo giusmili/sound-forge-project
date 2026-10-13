@@ -14,6 +14,7 @@ public:
     void resized() override;
 
     void syncWithEngine();
+    void clearTrackStrips();
 
     std::function<void()> onChanged;
 

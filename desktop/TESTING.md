@@ -1,4 +1,40 @@
-# SonoForge Studio 0.7 - Guide de test Windows
+# SonoForge Studio 0.8.2 - Guide de test Windows
+
+## Deplacement de la fenetre 0.8.2
+
+Glisser le grand titre SonoForge Studio dans le bandeau de l'application.
+La fenetre doit suivre la souris. Un double-clic sur ce titre agrandit ou
+restaure la fenetre. Les boutons et le selecteur de projets restent independants.
+La barre de titre Windows conserve son comportement habituel.
+
+## Regression de stabilite MIDI 0.8.2
+
+- Ajouter une piste MIDI, cliquer Tester C4 puis immediatement Annuler.
+- Retablir la piste, cliquer Tester C4 puis Supprimer sur la piste.
+- Annuler et retablir cette suppression plusieurs fois.
+- Refaire ces operations avec le Mixer ouvert.
+- Enregistrer un projet MIDI puis le rouvrir alors qu'une piste MIDI existe deja.
+- Verifier la fermeture pendant le test C4.
+
+Aucune de ces operations ne doit planter. Les controles sont detruits avant
+leurs pistes afin que leur destructeur ne lise pas une piste deja liberee.
+
+Test automatise : `ctest --test-dir build -C Release --output-on-failure`.
+La cible SonoForgeTests repete 50 cycles et verifie qu'une restauration
+echouee conserve les pistes existantes. Elle verifie aussi le rendu du
+synthetiseur, le silence MIDI, l'import et le transport WAV et la sauvegarde
+d'un projet audio/MIDI avec conservation du volume et du mode muet.
+
+Compilation Windows avec limitation de la consommation memoire :
+
+```powershell
+$env:_CL_ = "/MP2"
+cmake --build build --config Release --parallel 1
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Compilation sans tests :
+`cmake -S desktop -B build -DBUILD_TESTING=OFF`.
 
 ## 1. Fermeture
 

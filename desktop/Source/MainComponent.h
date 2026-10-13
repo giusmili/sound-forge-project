@@ -7,6 +7,7 @@
 #include "TrackRowComponent.h"
 #include "MidiTrackRowComponent.h"
 #include "MixerPanelComponent.h"
+#include "WindowDragHandle.h"
 
 class MainComponent final : public juce::Component,
                             public juce::MenuBarModel,
@@ -18,6 +19,9 @@ public:
 
     void paint(juce::Graphics& graphics) override;
     void resized() override;
+    bool keyPressed(const juce::KeyPress& key) override;
+    void startPlayback() { playButton.triggerClick(); }
+    void importAudioFiles(const juce::Array<juce::File>& files);
 
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex(
@@ -34,6 +38,7 @@ public:
     );
 
 private:
+    friend class MidiLifetimeTests;
     struct ProjectSnapshot
     {
         std::vector<AudioEngine::TrackState> tracks;
@@ -137,7 +142,7 @@ private:
 
     AudioEngine audioEngine;
 
-    juce::Label titleLabel;
+    WindowDragHandle titleLabel;
     juce::Label projectLabel;
     juce::Label timeLabel;
     juce::Label masterLabel;
@@ -180,6 +185,7 @@ private:
     bool mixerVisible = false;
     juce::Component trackList;
     juce::Viewport trackViewport;
+    juce::TooltipWindow tooltipWindow { this, 600 };
     juce::OwnedArray<TrackRowComponent> trackRows;
     juce::OwnedArray<MidiTrackRowComponent> midiTrackRows;
     TrackRowComponent* selectedRow = nullptr;

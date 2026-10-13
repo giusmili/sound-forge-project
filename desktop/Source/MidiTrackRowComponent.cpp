@@ -1,4 +1,5 @@
 #include "MidiTrackRowComponent.h"
+#include "TimelineRulerComponent.h"
 
 namespace
 {
@@ -7,7 +8,7 @@ constexpr auto timelineColour = 0xff171421;
 constexpr auto textColour = 0xffe8edf3;
 constexpr auto midiColour = 0xffb58cff;
 constexpr auto muteColour = 0xffd65454;
-constexpr int controlsWidth = 240;
+constexpr int controlsWidth = TimelineRulerComponent::controlsWidth;
 }
 
 MidiTrackRowComponent::MidiTrackRowComponent(

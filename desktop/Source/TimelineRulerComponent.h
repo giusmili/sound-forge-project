@@ -9,6 +9,7 @@ public:
 
     void paint(juce::Graphics& graphics) override;
     void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
 
     void setView(
         double projectLengthSeconds,
@@ -21,8 +22,11 @@ public:
     std::function<void(double)> onSeek;
 
     static constexpr int controlsWidth = 250;
+    // Same horizontal inset as the waveform area of the track rows.
+    static constexpr int timelineInset = 5;
 
 private:
+    [[nodiscard]] juce::Rectangle<int> getTimelineBounds() const;
     static juce::String formatTick(double seconds);
     [[nodiscard]] double chooseTickInterval() const;
 

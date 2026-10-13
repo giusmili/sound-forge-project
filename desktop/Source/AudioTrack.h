@@ -9,7 +9,8 @@ public:
         juce::File sourceFile,
         juce::String trackName,
         std::unique_ptr<juce::AudioFormatReaderSource> source,
-        double sourceSampleRate
+        double sourceSampleRate,
+        juce::TimeSliceThread& readAheadThread
     );
 
     ~AudioTrack() override;

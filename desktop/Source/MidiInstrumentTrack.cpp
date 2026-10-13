@@ -35,10 +35,13 @@ void MidiInstrumentTrack::getNextAudioBlock(
     if (bufferToFill.buffer == nullptr)
         return;
 
+    // Synthesiser adds samples, but MixerAudioSource expects each input to
+    // replace its buffer. Clear it to avoid replaying another track's samples.
+    bufferToFill.clearActiveBufferRegion();
+
     if (muted.load())
     {
         peakLevel.store(0.0f);
-        bufferToFill.clearActiveBufferRegion();
         return;
     }
 
