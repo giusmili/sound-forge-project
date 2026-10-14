@@ -48,6 +48,36 @@ Les effets sont enregistres dans le projet (`effects` par piste). Les projets pl
 
 Limites de cette premiere version : pas d'effet sur le Master, pas de synchronisation des delays au BPM, distorsion sans suréchantillonnage, et les reglages d'effets ne sont pas dans l'historique Annuler / Retablir (comme les faders du mixer).
 
+## Fichiers de projet
+
+Les projets sont enregistres avec l'extension courte **.sfs**. Les sauvegardes automatiques et de secours suivent le meme schema : `nom.autosave.sfs` et `nom.backup.sfs`.
+
+Les projets crees avec une version precedente (`.sonoforge`) s'ouvrent normalement et sont enregistres sous leur nom d'origine. Pour les convertir, utiliser Fichier > Enregistrer sous... : le nom propose est le meme avec l'extension .sfs, et l'ancien fichier n'est pas modifie. Une sauvegarde automatique `.autosave.sonoforge` laissee par une ancienne version est reprise automatiquement pour la recuperation.
+## Edition des clips au clic droit
+
+Un clic droit sur un clip audio ouvre un menu :
+
+- Couper ici / Couper au curseur de lecture
+- Raccourcir le debut ici / la fin ici (position de la souris)
+- Raccourcir le debut / la fin au curseur de lecture
+- Dupliquer, Muet, Solo, Supprimer
+
+La position de la souris suit la grille quand Snap Grid est actif. Chaque coupe ou rognage est annulable.
+
+## Export du mixage
+
+Fichier > Exporter le mixage... (ou le bouton Exporter) rend le mixage complet dans un fichier :
+
+- formats : WAV 16 / 24 bits, WAV 32 bits flottant, FLAC 16 / 24 bits
+- taux d'echantillonnage : 44100, 48000 ou 96000 Hz
+- normalisation optionnelle a -1 dBFS
+
+Le rendu est fait hors ligne, plus vite que le temps reel, sans toucher a la lecture. Il applique les memes effets, volumes, pans, Mute / Solo et gain Master que la lecture. Une queue de 3 secondes est ajoutee quand un effet est actif, pour laisser sonner reverb et delay.
+
+Si le signal depasse 0 dBFS, l'export le signale (echantillons ecretes). Annuler pendant le rendu ne touche pas un fichier existant du meme nom.
+
+Limite : les pistes MIDI / Instrument ne sont pas exportees, car elles n'ont pas encore de clips (le piano roll arrive plus tard).
+
 ## Fermeture et menus
 
 SonoForge dispose maintenant d'une barre de menus standard :
@@ -136,7 +166,7 @@ Les projets formatVersion 1 restent compatibles en lecture.
 - fermeture securisee
 - projets recents
 - autosave / backup / recovery
-- sauvegarde .sonoforge
+- sauvegarde de projet .sfs (les anciens .sonoforge restent ouvrables)
 - Undo / Redo
 - Split / Trim
 - duplication / suppression

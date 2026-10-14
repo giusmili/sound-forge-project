@@ -7,6 +7,7 @@
 #include "TrackRowComponent.h"
 #include "MidiTrackRowComponent.h"
 #include "MixerPanelComponent.h"
+#include "MixdownRenderer.h"
 #include "WindowDragHandle.h"
 
 class MainComponent final : public juce::Component,
@@ -53,11 +54,21 @@ private:
     };
 
     void openAudioFiles();
+    void exportMix();
+    void chooseExportFile(
+        std::vector<AudioEngine::TrackState> tracks,
+        MixdownOptions options
+    );
+    [[nodiscard]] juce::File getExportDirectory() const;
     void openProject();
     void openRecentProject(const juce::File& file);
     void saveProject();
+    // Always asks for a file name, so a project can be copied or converted
+    // to the .sfs extension.
+    void saveProjectAs();
     void saveProjectWithCompletion(
-        std::function<void(bool)> completion
+        std::function<void(bool)> completion,
+        bool alwaysAskForFile = false
     );
     void recoverAutosave();
     void confirmSaveBeforeAction(
@@ -116,6 +127,10 @@ private:
     void selectRow(TrackRowComponent* row);
     void duplicateSelectedClip();
     void splitSelectedClip();
+    void splitClipAt(
+        TrackRowComponent& row,
+        double projectSeconds
+    );
     void deleteSelectedClip();
     void toggleRecording();
     void startAudioRecording();
@@ -171,6 +186,7 @@ private:
     juce::TextButton recordButton { "Record" };
     juce::TextButton audioSettingsButton { "Audio" };
     juce::TextButton mixerButton { "Mixer" };
+    juce::TextButton exportButton { "Exporter" };
     juce::TextButton snapButton { "Snap Grid" };
 
     juce::ComboBox gridCombo;
@@ -195,6 +211,7 @@ private:
 
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<juce::FileChooser> projectFileChooser;
+    std::unique_ptr<juce::FileChooser> exportFileChooser;
     juce::File currentProjectFile;
     juce::StringArray recentProjectPaths;
 

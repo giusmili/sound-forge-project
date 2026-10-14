@@ -23,6 +23,15 @@ public:
 
     void syncToProjectPosition(double projectPositionSeconds, bool projectPlaying);
 
+    // Fader and balance, shared with the offline mixdown so both sound alike.
+    static void applyGainAndPan(
+        juce::AudioBuffer<float>& buffer,
+        int startSample,
+        int numSamples,
+        float gain,
+        float pan
+    );
+
     void setGain(float newGain);
     void setPan(float newPan);
     void setMuted(bool shouldBeMuted);

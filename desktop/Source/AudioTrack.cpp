@@ -75,48 +75,13 @@ void AudioTrack::getNextAudioBlock(
         bufferToFill.numSamples
     );
 
-    const auto currentGain = juce::jmax(0.0f, gain.load());
-    const auto currentPan = juce::jlimit(-1.0f, 1.0f, pan.load());
-
-    auto leftGain = currentGain;
-    auto rightGain = currentGain;
-
-    if (currentPan < 0.0f)
-        rightGain *= 1.0f + currentPan;
-    else if (currentPan > 0.0f)
-        leftGain *= 1.0f - currentPan;
-
-    if (bufferToFill.buffer->getNumChannels() > 0)
-    {
-        bufferToFill.buffer->applyGain(
-            0,
-            bufferToFill.startSample,
-            bufferToFill.numSamples,
-            leftGain
-        );
-    }
-
-    if (bufferToFill.buffer->getNumChannels() > 1)
-    {
-        bufferToFill.buffer->applyGain(
-            1,
-            bufferToFill.startSample,
-            bufferToFill.numSamples,
-            rightGain
-        );
-    }
-
-    for (int channel = 2;
-         channel < bufferToFill.buffer->getNumChannels();
-         ++channel)
-    {
-        bufferToFill.buffer->applyGain(
-            channel,
-            bufferToFill.startSample,
-            bufferToFill.numSamples,
-            currentGain
-        );
-    }
+    applyGainAndPan(
+        *bufferToFill.buffer,
+        bufferToFill.startSample,
+        bufferToFill.numSamples,
+        gain.load(),
+        pan.load()
+    );
 
     float peak = 0.0f;
 
@@ -137,6 +102,35 @@ void AudioTrack::getNextAudioBlock(
     peakLevel.store(
         juce::jlimit(0.0f, 1.5f, peak)
     );
+}
+
+void AudioTrack::applyGainAndPan(
+    juce::AudioBuffer<float>& buffer,
+    const int startSample,
+    const int numSamples,
+    const float gain,
+    const float pan
+)
+{
+    const auto currentGain = juce::jmax(0.0f, gain);
+    const auto currentPan = juce::jlimit(-1.0f, 1.0f, pan);
+
+    auto leftGain = currentGain;
+    auto rightGain = currentGain;
+
+    if (currentPan < 0.0f)
+        rightGain *= 1.0f + currentPan;
+    else if (currentPan > 0.0f)
+        leftGain *= 1.0f - currentPan;
+
+    if (buffer.getNumChannels() > 0)
+        buffer.applyGain(0, startSample, numSamples, leftGain);
+
+    if (buffer.getNumChannels() > 1)
+        buffer.applyGain(1, startSample, numSamples, rightGain);
+
+    for (int channel = 2; channel < buffer.getNumChannels(); ++channel)
+        buffer.applyGain(channel, startSample, numSamples, currentGain);
 }
 
 void AudioTrack::syncToProjectPosition(

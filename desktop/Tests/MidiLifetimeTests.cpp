@@ -90,11 +90,55 @@ public:
         app.audioEngine.getNextAudioBlock({ &buffer, 0, buffer.getNumSamples() });
         require(buffer.getMagnitude(0, buffer.getNumSamples()) < 0.00001f, "Muted WAV produced output");
         app.audioEngine.stop();
+
+        // Right-click clip editing: trim and split at an explicit position.
+        {
+            auto near = [](double a, double b) { return std::abs(a - b) < 1.0e-6; };
+            auto* row = app.trackRows[0];
+            auto* clip = &row->getTrack();
+            require(near(clip->getClipDurationSeconds(), 0.1), "Unexpected fixture length");
+
+            require(! row->trimStartTo(0.0), "Trim at the clip edge must be ignored");
+            require(! row->trimEndTo(0.5), "Trim past the clip end must be ignored");
+            require(app.undoStack.empty() || near(clip->getClipDurationSeconds(), 0.1),
+                    "Rejected trim modified the clip");
+
+            require(row->trimStartTo(0.02), "Trim start rejected");
+            require(near(clip->getStartOffsetSeconds(), 0.02), "Trim start moved the wrong edge");
+            require(near(clip->getSourceStartSeconds(), 0.02), "Trim start did not skip source audio");
+            require(near(clip->getProjectEndSeconds(), 0.1), "Trim start changed the clip end");
+
+            require(row->trimEndTo(0.09), "Trim end rejected");
+            require(near(clip->getProjectEndSeconds(), 0.09), "Trim end set the wrong end");
+            require(near(clip->getSourceStartSeconds(), 0.02), "Trim end changed the source start");
+
+            app.undo();
+            app.undo();
+            clip = &app.trackRows[0]->getTrack();
+            require(near(clip->getStartOffsetSeconds(), 0.0)
+                        && near(clip->getClipDurationSeconds(), 0.1),
+                    "Undo did not restore the trimmed clip");
+
+            app.splitClipAt(*app.trackRows[0], 0.04);
+            require(app.trackRows.size() == 2, "Split at position created no second clip");
+            require(near(app.trackRows[0]->getTrack().getClipDurationSeconds(), 0.04),
+                    "Left half has wrong length");
+            require(near(app.trackRows[1]->getTrack().getStartOffsetSeconds(), 0.04)
+                        && near(app.trackRows[1]->getTrack().getClipDurationSeconds(), 0.06),
+                    "Right half has wrong position or length");
+            require(near(app.audioEngine.getLengthSeconds(), 0.1), "Split changed project length");
+
+            app.undo();
+            require(app.trackRows.size() == 1, "Undo did not rejoin the split clip");
+            require(near(app.trackRows[0]->getTrack().getClipDurationSeconds(), 0.1),
+                    "Undo did not restore the clip length");
+            audio = &app.trackRows[0]->getTrack();
+        }
         // A missing source must leave existing audio and MIDI usable after UI reconstruction.
         app.addMidiInstrumentTrack();
         app.midiTrackRows[0]->getTrack().setGain(0.42f);
         app.midiTrackRows[0]->getTrack().setMuted(true);
-        juce::TemporaryFile project(".sonoforge");
+        juce::TemporaryFile project(".sfs");
         require(app.writeSnapshotFile(project.getFile(), app.captureSnapshot()), "Project save failed");
         app.midiTrackRows[0]->getTrack().setGain(0.9f);
         require(app.loadProjectFile(project.getFile(), false), "Project reload failed");
@@ -115,7 +159,7 @@ public:
             require(app.makeSnapshotFingerprint(app.captureSnapshot()) != fingerprintBefore,
                     "Effect change not detected as a project change");
 
-            juce::TemporaryFile effectsProject(".sonoforge");
+            juce::TemporaryFile effectsProject(".sfs");
             require(app.writeSnapshotFile(effectsProject.getFile(), app.captureSnapshot()),
                     "Project with effects failed to save");
             effects.setParam(fx::delayOn, 0.0f);
@@ -161,6 +205,37 @@ public:
                     "Delay repeat not audible through the track chain");
             require(rendered.getMagnitude(0, 0, 24000) <= 1.5f, "Rendered level out of range");
             synth.setMuted(true);
+        }
+
+        // Short project extension; files from older versions stay usable.
+        {
+            juce::TemporaryFile legacyProject(".sonoforge");
+            require(app.writeSnapshotFile(legacyProject.getFile(), app.captureSnapshot()),
+                    "Project with the old extension failed to save");
+            require(app.loadProjectFile(legacyProject.getFile(), false),
+                    "Project with the old .sonoforge extension no longer opens");
+
+            const auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                .getChildFile("sonoforge-ext-" + juce::Uuid().toString());
+            require(directory.createDirectory(), "Cannot create extension test folder");
+
+            const auto previousProject = app.currentProjectFile;
+            app.currentProjectFile = directory.getChildFile("song.sfs");
+
+            require(app.getAutosaveFile().getFileName() == "song.autosave.sfs",
+                    "Autosave must use the short extension");
+            require(app.getBackupFile(app.currentProjectFile).getFileName() == "song.backup.sfs",
+                    "Backup must use the short extension");
+
+            // An autosave written by an older version must still be recoverable.
+            const auto legacyAutosave = directory.getChildFile("song.autosave.sonoforge");
+            require(legacyAutosave.replaceWithText("old autosave"), "Cannot create legacy autosave");
+            require(app.getAutosaveFile().loadFileAsString() == "old autosave",
+                    "Legacy autosave was not carried over");
+            require(! legacyAutosave.exists(), "Legacy autosave left behind after migration");
+
+            app.currentProjectFile = previousProject;
+            directory.deleteRecursively();
         }
 
         auto invalid = app.captureSnapshot();

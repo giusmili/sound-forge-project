@@ -1,4 +1,4 @@
-# SonoForge Studio 0.9.0 - Guide de test Windows
+# SonoForge Studio 0.9.1 - Guide de test Windows
 
 ## Deplacement de la fenetre 0.8.2
 
@@ -89,13 +89,13 @@ Cliquer Tester C4. Un son de synthese court doit etre audible sur la sortie audi
 
 Ajouter une piste MIDI, modifier son volume ou Mute, puis enregistrer le projet.
 
-Fermer SonoForge, relancer et ouvrir le .sonoforge.
+Fermer SonoForge, relancer et ouvrir le .sfs.
 
 La piste MIDI doit etre restauree avec ses reglages.
 
 ## 5. Ancien projet
 
-Ouvrir un ancien projet .sonoforge cree avec la version 0.6.
+Ouvrir un ancien projet .sonoforge (versions 0.6 a 0.9.0) : il s'ouvre et s'enregistre sous son nom.
 
 Il doit continuer a s'ouvrir normalement.
 
@@ -119,3 +119,22 @@ Ces fonctions arrivent sur cette base.
 - Enregistrer, rouvrir le projet : les reglages d'effets sont conserves.
 - Ouvrir un projet cree avant 0.9.0 : aucun effet actif, aucun message d'erreur.
 - ctest -C Release : MidiLifetime et EffectsDsp doivent passer.
+
+
+## Clic droit sur un clip et export 0.9.1
+
+- Clic droit sur un clip audio : le menu s'ouvre et le clip ne bouge pas.
+- Couper ici / Raccourcir ici : le resultat correspond a la position de la souris (grille si Snap est actif).
+- Annuler restaure le clip, y compris apres un rognage.
+- Fichier > Exporter le mixage... : choisir format et taux, nommer le fichier, suivre la progression, ouvrir le fichier produit dans un lecteur externe.
+- Annuler pendant l'export : aucun fichier partiel ne reste.
+- Un projet avec seulement des pistes MIDI affiche "Rien a exporter".
+- ctest -C Release : MidiLifetime, EffectsDsp et MixdownRender doivent passer.
+
+
+## Extension .sfs et Enregistrer sous 0.9.1
+
+- Fichier > Enregistrer sur un nouveau projet propose `projet.sfs`.
+- Ouvrir un ancien `.sonoforge` : il s'ouvre ; Enregistrer l'ecrit sous son nom d'origine.
+- Fichier > Enregistrer sous... propose le meme nom en `.sfs` ; apres validation le titre de la fenetre change et l'ancien fichier reste intact.
+- Fermer le programme sans enregistrer apres une modification, relancer, cliquer Recuperer : le travail revient (autosave `.autosave.sfs`).

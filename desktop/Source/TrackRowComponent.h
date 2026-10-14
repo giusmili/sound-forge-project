@@ -45,11 +45,20 @@ public:
     [[nodiscard]] bool isSelected() const noexcept;
     [[nodiscard]] AudioTrack& getTrack() noexcept;
 
+    // Shorten the clip so it starts / ends at a project position (seconds).
+    // Ignored, without an undo entry, when the position is not inside the clip.
+    bool trimStartTo(double projectSeconds);
+    bool trimEndTo(double projectSeconds);
+
     std::function<void(double)> onSeek;
     std::function<void()> onSoloChanged;
     std::function<void()> onClipMoved;
     std::function<void()> onEditBegin;
     std::function<void(TrackRowComponent*)> onSelectionRequested;
+    // Right-click menu commands handled by the owner of the project.
+    std::function<void(double)> onSplitRequested;
+    std::function<void()> onDuplicateRequested;
+    std::function<void()> onDeleteRequested;
 
 private:
     enum class DragMode
@@ -67,6 +76,8 @@ private:
     void refreshMuteButton();
     void refreshSoloButton();
     void updateMouseCursor(juce::Point<float> position);
+    void showClipContextMenu(const juce::MouseEvent& event);
+    [[nodiscard]] bool isInsideClip(double projectSeconds) const noexcept;
 
     [[nodiscard]] juce::Rectangle<int> getWaveformBounds() const;
     [[nodiscard]] juce::Rectangle<int> getClipBounds() const;

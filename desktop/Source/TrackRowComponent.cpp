@@ -379,6 +379,13 @@ void TrackRowComponent::mouseDown(
     const juce::MouseEvent& event
 )
 {
+    // Right-click (or ctrl-click) opens the clip menu instead of starting a drag.
+    if (event.mods.isPopupMenu())
+    {
+        showClipContextMenu(event);
+        return;
+    }
+
     const auto clipBounds = getClipBounds();
 
     if (projectLength > 0.0
@@ -594,6 +601,197 @@ void TrackRowComponent::mouseUp(
 
     updateMouseCursor(event.position);
     repaint();
+}
+
+void TrackRowComponent::showClipContextMenu(
+    const juce::MouseEvent& event
+)
+{
+    const auto clipBounds = getClipBounds();
+    const auto waveformBounds = getWaveformBounds();
+
+    if (projectLength <= 0.0
+        || viewDuration <= 0.0
+        || waveformBounds.getWidth() <= 0
+        || ! clipBounds.contains(event.getPosition()))
+    {
+        return;
+    }
+
+    if (onSelectionRequested)
+        onSelectionRequested(this);
+
+    // Project time under the pointer, snapped like a drag when Snap is on.
+    auto clickSeconds =
+        viewStart
+        + static_cast<double>(
+              event.position.x
+              - static_cast<float>(waveformBounds.getX()))
+            / static_cast<double>(waveformBounds.getWidth())
+            * viewDuration;
+
+    if (snapEnabled && snapInterval > 0.0)
+    {
+        clickSeconds =
+            std::round(clickSeconds / snapInterval)
+            * snapInterval;
+    }
+
+    const auto playhead = playheadPosition;
+    const auto canCutHere = isInsideClip(clickSeconds);
+    const auto canCutAtPlayhead = isInsideClip(playhead);
+
+    enum MenuItem
+    {
+        cutHere = 1,
+        cutAtPlayhead,
+        trimStartHere,
+        trimEndHere,
+        trimStartAtPlayhead,
+        trimEndAtPlayhead,
+        duplicateClip,
+        toggleMute,
+        toggleSolo,
+        deleteClip
+    };
+
+    juce::PopupMenu menu;
+    menu.addItem(cutHere, "Couper ici", canCutHere && onSplitRequested != nullptr);
+    menu.addItem(
+        cutAtPlayhead,
+        "Couper au curseur de lecture",
+        canCutAtPlayhead && onSplitRequested != nullptr
+    );
+    menu.addSeparator();
+    menu.addItem(trimStartHere, "Raccourcir le debut ici", canCutHere);
+    menu.addItem(trimEndHere, "Raccourcir la fin ici", canCutHere);
+    menu.addItem(
+        trimStartAtPlayhead,
+        "Raccourcir le debut au curseur de lecture",
+        canCutAtPlayhead
+    );
+    menu.addItem(
+        trimEndAtPlayhead,
+        "Raccourcir la fin au curseur de lecture",
+        canCutAtPlayhead
+    );
+    menu.addSeparator();
+    menu.addItem(duplicateClip, "Dupliquer", onDuplicateRequested != nullptr);
+    menu.addItem(toggleMute, "Muet", true, track.isMuted());
+    menu.addItem(toggleSolo, "Solo", true, track.isSolo());
+    menu.addSeparator();
+    menu.addItem(deleteClip, "Supprimer", onDeleteRequested != nullptr);
+
+    juce::Component::SafePointer<TrackRowComponent> safeThis(this);
+
+    menu.showMenuAsync(
+        juce::PopupMenu::Options(),
+        [safeThis, clickSeconds, playhead](const int result)
+        {
+            // The row may have been rebuilt (undo, project reload) meanwhile.
+            if (safeThis == nullptr || result == 0)
+                return;
+
+            auto& row = *safeThis;
+
+            switch (result)
+            {
+                case cutHere:
+                    if (row.onSplitRequested)
+                        row.onSplitRequested(clickSeconds);
+                    break;
+                case cutAtPlayhead:
+                    if (row.onSplitRequested)
+                        row.onSplitRequested(playhead);
+                    break;
+                case trimStartHere:
+                    row.trimStartTo(clickSeconds);
+                    break;
+                case trimEndHere:
+                    row.trimEndTo(clickSeconds);
+                    break;
+                case trimStartAtPlayhead:
+                    row.trimStartTo(playhead);
+                    break;
+                case trimEndAtPlayhead:
+                    row.trimEndTo(playhead);
+                    break;
+                case duplicateClip:
+                    if (row.onDuplicateRequested)
+                        row.onDuplicateRequested();
+                    break;
+                case toggleMute:
+                    row.muteButton.triggerClick();
+                    break;
+                case toggleSolo:
+                    row.soloButton.triggerClick();
+                    break;
+                case deleteClip:
+                    if (row.onDeleteRequested)
+                        row.onDeleteRequested();
+                    break;
+                default:
+                    break;
+            }
+        }
+    );
+}
+
+bool TrackRowComponent::isInsideClip(
+    const double projectSeconds
+) const noexcept
+{
+    return projectSeconds
+            > track.getStartOffsetSeconds() + minimumClipDurationSeconds
+        && projectSeconds
+            < track.getProjectEndSeconds() - minimumClipDurationSeconds;
+}
+
+bool TrackRowComponent::trimStartTo(const double projectSeconds)
+{
+    if (! isInsideClip(projectSeconds))
+        return false;
+
+    if (onEditBegin)
+        onEditBegin();
+
+    const auto newSourceStart =
+        track.getSourceStartSeconds()
+        + (projectSeconds - track.getStartOffsetSeconds());
+
+    const auto sourceEnd = track.getSourceEndSeconds();
+
+    track.setStartOffsetSeconds(projectSeconds);
+    track.setSourceRange(newSourceStart, sourceEnd);
+
+    if (onClipMoved)
+        onClipMoved();
+
+    repaint();
+    return true;
+}
+
+bool TrackRowComponent::trimEndTo(const double projectSeconds)
+{
+    if (! isInsideClip(projectSeconds))
+        return false;
+
+    if (onEditBegin)
+        onEditBegin();
+
+    const auto sourceStart = track.getSourceStartSeconds();
+
+    track.setSourceRange(
+        sourceStart,
+        sourceStart
+            + (projectSeconds - track.getStartOffsetSeconds())
+    );
+
+    if (onClipMoved)
+        onClipMoved();
+
+    repaint();
+    return true;
 }
 
 void TrackRowComponent::mouseMove(

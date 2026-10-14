@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SonoForgeStudio VERSION 0.9.0 LANGUAGES C CXX)
+project(SonoForgeStudio VERSION 0.9.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -39,6 +39,8 @@ target_sources(SonoForge
         Source/AudioTrack.h
         Source/TrackEffects.cpp
         Source/TrackEffects.h
+        Source/MixdownRenderer.cpp
+        Source/MixdownRenderer.h
         Source/EffectsEditorComponent.cpp
         Source/EffectsEditorComponent.h
         Source/MidiInstrumentTrack.cpp
@@ -92,4 +94,20 @@ if(BUILD_TESTING)
         juce::juce_audio_utils
         juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     add_test(NAME EffectsDsp COMMAND SonoForgeEffectsTests)
+
+    # Offline mixdown against real files; no audio device or GUI needed.
+    juce_add_console_app(SonoForgeMixdownTests PRODUCT_NAME "SonoForge Mixdown Tests")
+    target_sources(SonoForgeMixdownTests PRIVATE
+        Source/MixdownRenderer.cpp
+        Source/MixdownRenderer.h
+        Source/TrackEffects.cpp
+        Source/TrackEffects.h
+        Source/AudioTrack.cpp
+        Source/AudioTrack.h
+        Tests/MixdownTests.cpp)
+    target_compile_definitions(SonoForgeMixdownTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(SonoForgeMixdownTests PRIVATE
+        juce::juce_audio_utils juce::juce_audio_formats
+        juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+    add_test(NAME MixdownRender COMMAND SonoForgeMixdownTests)
 endif()

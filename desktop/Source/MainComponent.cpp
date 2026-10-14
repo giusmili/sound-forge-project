@@ -16,9 +16,16 @@ constexpr double minimumSplitMarginSeconds = 0.01;
 constexpr auto maxHistoryEntries = 50U;
 constexpr double autosaveIntervalMs = 30000.0;
 
+// Project files are written with the short extension. The long one is still
+// accepted when opening, and old autosave files are migrated.
+constexpr auto projectExtension = ".sfs";
+constexpr auto legacyProjectExtension = ".sonoforge";
+
 constexpr int menuOpenProject = 1001;
 constexpr int menuSaveProject = 1002;
+constexpr int menuSaveProjectAs = 1005;
 constexpr int menuImportAudio = 1003;
+constexpr int menuExportMix = 1004;
 constexpr int menuQuit = 1009;
 
 constexpr int menuUndo = 2001;
@@ -38,7 +45,7 @@ MainComponent::MainComponent()
     addAndMakeVisible(menuBar);
 
     titleLabel.setText(
-        "SonoForge Studio 0.9.0",
+        "SonoForge Studio 0.9.1",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -108,6 +115,7 @@ MainComponent::MainComponent()
              &recordButton,
              &audioSettingsButton,
              &mixerButton,
+             &exportButton,
              &snapButton
          })
     {
@@ -248,6 +256,12 @@ MainComponent::MainComponent()
         juce::TextButton::buttonOnColourId,
         juce::Colour(accentColour)
     );
+
+    exportButton.setTooltip("Exporter le mixage en WAV ou FLAC");
+    exportButton.onClick = [this]
+    {
+        exportMix();
+    };
 
     mixerPanel.onChanged = [this]
     {
@@ -592,6 +606,9 @@ void MainComponent::resized()
     mixerButton.setBounds(
         viewRow.removeFromRight(96).reduced(3)
     );
+    exportButton.setBounds(
+        viewRow.removeFromRight(96).reduced(3)
+    );
 
     area.removeFromTop(6);
 
@@ -645,10 +662,21 @@ juce::PopupMenu MainComponent::getMenuForIndex(
             "Enregistrer",
             true
         );
+        menu.addItem(
+            menuSaveProjectAs,
+            "Enregistrer sous...",
+            true
+        );
         menu.addSeparator();
         menu.addItem(
             menuImportAudio,
             "Importer audio...",
+            ! audioEngine.isRecording()
+        );
+        menu.addSeparator();
+        menu.addItem(
+            menuExportMix,
+            "Exporter le mixage...",
             ! audioEngine.isRecording()
         );
         menu.addSeparator();
@@ -708,9 +736,17 @@ void MainComponent::menuItemSelected(
             saveProject();
             break;
 
+        case menuSaveProjectAs:
+            saveProjectAs();
+            break;
+
         case menuImportAudio:
         case menuAddAudioTrack:
             openAudioFiles();
+            break;
+
+        case menuExportMix:
+            exportMix();
             break;
 
         case menuUndo:
@@ -843,12 +879,373 @@ void MainComponent::openAudioFiles()
     );
 }
 
+namespace
+{
+// Runs the offline mixdown on a worker thread behind a progress window with
+// a Cancel button. Deletes itself once the result has been delivered.
+class MixdownJob final : public juce::ThreadWithProgressWindow
+{
+public:
+    MixdownJob(
+        juce::AudioFormatManager& manager,
+        std::vector<AudioEngine::TrackState> trackStates,
+        MixdownOptions exportOptions,
+        std::function<void(const MixdownResult&)> onFinished
+    )
+        : juce::ThreadWithProgressWindow(
+              "Export du mixage en cours...",
+              true,
+              true,
+              5000,
+              "Annuler"
+          ),
+          formatManager(manager),
+          tracks(std::move(trackStates)),
+          options(std::move(exportOptions)),
+          finished(std::move(onFinished))
+    {
+    }
+
+    void run() override
+    {
+        result = MixdownRenderer::render(
+            formatManager,
+            tracks,
+            options,
+            [this](const double fraction)
+            {
+                setProgress(fraction);
+                return ! threadShouldExit();
+            }
+        );
+    }
+
+    void threadComplete(const bool) override
+    {
+        if (finished)
+            finished(result);
+
+        // This runs inside the window's own timer callback: delete later.
+        juce::MessageManager::callAsync(
+            [job = this]
+            {
+                delete job;
+            }
+        );
+    }
+
+private:
+    juce::AudioFormatManager& formatManager;
+    std::vector<AudioEngine::TrackState> tracks;
+    MixdownOptions options;
+    std::function<void(const MixdownResult&)> finished;
+    MixdownResult result;
+};
+
+void showExportResult(
+    const MixdownOptions& options,
+    const MixdownResult& result
+)
+{
+    if (result.cancelled)
+    {
+        AppServices::log("Export cancelled");
+        return;
+    }
+
+    if (result.status.failed())
+    {
+        AppServices::log("Export failed: " + result.status.getErrorMessage());
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Export impossible",
+            result.status.getErrorMessage()
+        );
+        return;
+    }
+
+    const auto level = result.peak > 0.00001f
+        ? juce::String(juce::Decibels::gainToDecibels(result.peak), 1) + " dBFS"
+        : juce::String("silence");
+
+    juce::String message;
+    message << options.outputFile.getFileName() << "\n\n"
+            << "Format : "
+            << MixdownRenderer::getFormatDescription(options.format)
+            << ", " << juce::String(juce::roundToInt(options.sampleRate))
+            << " Hz, stereo\n"
+            << "Duree : "
+            << juce::String(result.durationSeconds, 1) << " s\n"
+            << "Niveau crete : " << level;
+
+    if (result.clippedSamples > 0)
+    {
+        message << "\n\nAttention : "
+                << juce::String(result.clippedSamples)
+                << " echantillons depassaient 0 dBFS et ont ete ecretes. "
+                   "Baissez le volume Master ou activez la normalisation.";
+    }
+
+    AppServices::log("Export done: " + options.outputFile.getFullPathName());
+
+    const auto file = options.outputFile;
+
+    juce::AlertWindow::showAsync(
+        juce::MessageBoxOptions()
+            .withIconType(juce::MessageBoxIconType::InfoIcon)
+            .withTitle("Export termine")
+            .withMessage(message)
+            .withButton("Afficher le fichier")
+            .withButton("Fermer"),
+        [file](const int choice)
+        {
+            if (choice == 1)
+                file.revealToUser();
+        }
+    );
+}
+} // namespace
+
+juce::File MainComponent::getExportDirectory() const
+{
+    if (currentProjectFile.getFullPathName().isNotEmpty())
+    {
+        return currentProjectFile
+            .getParentDirectory()
+            .getChildFile("Exports");
+    }
+
+    return juce::File::getSpecialLocation(
+        juce::File::userDocumentsDirectory
+    )
+        .getChildFile("SonoForge Exports");
+}
+
+void MainComponent::exportMix()
+{
+    if (audioEngine.isRecording())
+        return;
+
+    audioEngine.pause();
+
+    const auto tracks = audioEngine.captureTrackStates();
+
+    MixdownOptions probe;
+    probe.masterGain = audioEngine.getMasterGain();
+
+    const auto length =
+        MixdownRenderer::calculateLengthSeconds(tracks, probe);
+
+    if (length <= 0.0)
+    {
+        juce::String reason =
+            "Rien a exporter : le mixage ne contient aucune piste audio audible.";
+
+        if (! audioEngine.getMidiTrackPointers().empty())
+        {
+            reason += "\nLes pistes MIDI / Instrument ne sont pas encore "
+                      "exportees : elles n'ont pas de clips.";
+        }
+
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::InfoIcon,
+            "Exporter le mixage",
+            reason
+        );
+        return;
+    }
+
+    auto* window = new juce::AlertWindow(
+        "Exporter le mixage",
+        "Duree du mixage : " + formatTime(length)
+            + "\nLe mixage inclut les effets, le volume, le pan, "
+              "Mute/Solo et le Master.",
+        juce::MessageBoxIconType::QuestionIcon
+    );
+
+    window->addComboBox(
+        "format",
+        { "WAV 24 bits", "WAV 16 bits", "WAV 32 bits flottant",
+          "FLAC 24 bits", "FLAC 16 bits" },
+        "Format"
+    );
+    window->addComboBox(
+        "rate",
+        { "44100 Hz", "48000 Hz", "96000 Hz" },
+        "Taux d'echantillonnage"
+    );
+    window->addComboBox(
+        "normalise",
+        { "Non", "Oui, a -1 dBFS" },
+        "Normaliser"
+    );
+
+    window->getComboBoxComponent("format")->setSelectedItemIndex(0);
+
+    auto deviceRate = 48000.0;
+
+    if (auto* device = audioEngine.getDeviceManager().getCurrentAudioDevice())
+        deviceRate = device->getCurrentSampleRate();
+
+    window->getComboBoxComponent("rate")->setSelectedItemIndex(
+        deviceRate > 70000.0 ? 2 : (deviceRate < 46000.0 ? 0 : 1)
+    );
+    window->getComboBoxComponent("normalise")->setSelectedItemIndex(0);
+
+    window->addButton(
+        "Exporter",
+        1,
+        juce::KeyPress(juce::KeyPress::returnKey)
+    );
+    window->addButton(
+        "Annuler",
+        0,
+        juce::KeyPress(juce::KeyPress::escapeKey)
+    );
+
+    auto safeThis =
+        juce::Component::SafePointer<MainComponent>(this);
+    const auto masterGain = audioEngine.getMasterGain();
+
+    window->enterModalState(
+        true,
+        juce::ModalCallbackFunction::create(
+            [safeThis, window, tracks, masterGain](const int result)
+            {
+                if (result != 1 || safeThis == nullptr)
+                    return;
+
+                static constexpr MixdownOptions::Format formats[] = {
+                    MixdownOptions::Format::wav24,
+                    MixdownOptions::Format::wav16,
+                    MixdownOptions::Format::wav32Float,
+                    MixdownOptions::Format::flac24,
+                    MixdownOptions::Format::flac16
+                };
+                static constexpr double rates[] = { 44100.0, 48000.0, 96000.0 };
+
+                // The window is still alive here: it is deleted after this callback.
+                const auto formatIndex = juce::jlimit(
+                    0,
+                    4,
+                    window->getComboBoxComponent("format")->getSelectedItemIndex()
+                );
+                const auto rateIndex = juce::jlimit(
+                    0,
+                    2,
+                    window->getComboBoxComponent("rate")->getSelectedItemIndex()
+                );
+
+                MixdownOptions options;
+                options.format = formats[formatIndex];
+                options.sampleRate = rates[rateIndex];
+                options.normalise =
+                    window->getComboBoxComponent("normalise")->getSelectedItemIndex() == 1;
+                options.masterGain = masterGain;
+
+                // Let the options window finish closing, and focus return to
+                // the main window, before the native save dialog appears.
+                juce::MessageManager::callAsync(
+                    [safeThis, tracks, options]
+                    {
+                        if (safeThis != nullptr)
+                            safeThis->chooseExportFile(tracks, options);
+                    }
+                );
+            }
+        ),
+        true
+    );
+}
+
+void MainComponent::chooseExportFile(
+    std::vector<AudioEngine::TrackState> tracks,
+    MixdownOptions options
+)
+{
+    const auto baseName =
+        currentProjectFile.getFullPathName().isNotEmpty()
+            ? currentProjectFile.getFileNameWithoutExtension()
+            : juce::String("Mixage");
+
+    const auto extension =
+        MixdownRenderer::getFileExtension(options.format);
+
+    // Open in the Exports folder once it exists, otherwise in its parent
+    // (project folder or Documents) rather than wherever Windows last was.
+    auto directory = getExportDirectory();
+
+    if (! directory.isDirectory())
+        directory = directory.getParentDirectory();
+
+    // Owned by the main window: an unowned native dialog could open behind it
+    // and look like the export had frozen.
+    exportFileChooser = std::make_unique<juce::FileChooser>(
+        "Exporter le mixage",
+        directory.getChildFile(baseName + extension),
+        "*" + extension,
+        true,
+        false,
+        getTopLevelComponent()
+    );
+
+    auto safeThis =
+        juce::Component::SafePointer<MainComponent>(this);
+
+    exportFileChooser->launchAsync(
+        juce::FileBrowserComponent::saveMode
+            | juce::FileBrowserComponent::canSelectFiles
+            | juce::FileBrowserComponent::warnAboutOverwriting,
+        [safeThis, tracks, options](const juce::FileChooser& chooser)
+        {
+            if (safeThis == nullptr)
+                return;
+
+            const auto chosen = chooser.getResult();
+
+            if (chosen.getFullPathName().isEmpty()
+                || safeThis->audioEngine.isRecording())
+            {
+                return;
+            }
+
+            auto exportOptions = options;
+            exportOptions.outputFile = chosen.withFileExtension(
+                MixdownRenderer::getFileExtension(options.format)
+            );
+
+            AppServices::log(
+                "Export: "
+                + exportOptions.outputFile.getFullPathName()
+                + " ("
+                + MixdownRenderer::getFormatDescription(exportOptions.format)
+                + ", "
+                + juce::String(juce::roundToInt(exportOptions.sampleRate))
+                + " Hz)"
+            );
+
+            auto* job = new MixdownJob(
+                safeThis->audioEngine.getFormatManager(),
+                tracks,
+                exportOptions,
+                [exportOptions](const MixdownResult& result)
+                {
+                    showExportResult(exportOptions, result);
+                }
+            );
+
+            job->launchThread();
+        }
+    );
+}
+
 void MainComponent::openProject()
 {
     projectFileChooser = std::make_unique<juce::FileChooser>(
         "Ouvrir un projet SonoForge",
         juce::File {},
-        "*.sonoforge"
+        juce::String("*") + projectExtension
+            + ";*" + legacyProjectExtension
     );
 
     auto safeThis =
@@ -915,14 +1312,23 @@ void MainComponent::saveProject()
     saveProjectWithCompletion({});
 }
 
+void MainComponent::saveProjectAs()
+{
+    saveProjectWithCompletion({}, true);
+}
+
 void MainComponent::saveProjectWithCompletion(
-    std::function<void(bool)> completion
+    std::function<void(bool)> completion,
+    const bool alwaysAskForFile
 )
 {
     if (audioEngine.isRecording())
         finishAudioRecording();
 
-    if (currentProjectFile.getFullPathName().isNotEmpty())
+    const auto hasProjectFile =
+        currentProjectFile.getFullPathName().isNotEmpty();
+
+    if (hasProjectFile && ! alwaysAskForFile)
     {
         const auto success =
             writeProjectFile(currentProjectFile);
@@ -933,12 +1339,26 @@ void MainComponent::saveProjectWithCompletion(
         return;
     }
 
+    // Suggest the current name with the short extension, next to the
+    // current file, so converting an old project is a single click.
+    const auto suggestion = hasProjectFile
+        ? currentProjectFile
+              .getSiblingFile(
+                  currentProjectFile.getFileNameWithoutExtension()
+                  + projectExtension)
+        : juce::File::getSpecialLocation(
+              juce::File::userDocumentsDirectory
+          ).getChildFile(juce::String("projet") + projectExtension);
+
     projectFileChooser = std::make_unique<juce::FileChooser>(
-        "Enregistrer le projet SonoForge",
-        juce::File::getSpecialLocation(
-            juce::File::userDocumentsDirectory
-        ).getChildFile("projet.sonoforge"),
-        "*.sonoforge"
+        alwaysAskForFile
+            ? "Enregistrer le projet SonoForge sous..."
+            : "Enregistrer le projet SonoForge",
+        suggestion,
+        juce::String("*") + projectExtension,
+        true,
+        false,
+        getTopLevelComponent()
     );
 
     auto safeThis =
@@ -966,8 +1386,8 @@ void MainComponent::saveProjectWithCompletion(
                 return;
             }
 
-            if (! file.hasFileExtension(".sonoforge"))
-                file = file.withFileExtension(".sonoforge");
+            if (! file.hasFileExtension(projectExtension))
+                file = file.withFileExtension(projectExtension);
 
             const auto success =
                 safeThis->writeProjectFile(file);
@@ -1086,7 +1506,8 @@ bool MainComponent::writeProjectFile(
             juce::AlertWindow::showMessageBoxAsync(
                 juce::MessageBoxIconType::WarningIcon,
                 "Sauvegarde de secours impossible",
-                "SonoForge n'a pas pu creer le fichier .backup.sonoforge. "
+                "SonoForge n'a pas pu creer le fichier de sauvegarde (.backup"
+                + juce::String(projectExtension) + "). "
                 "Le projet principal n'a pas ete ecrase."
             );
             return false;
@@ -1229,24 +1650,45 @@ void MainComponent::updateRecoveryButton()
 
 juce::File MainComponent::getAutosaveFile() const
 {
+    juce::File current;
+    juce::File legacy;
+
     if (currentProjectFile
             .getFullPathName()
             .isNotEmpty())
     {
-        return currentProjectFile
-            .getSiblingFile(
-                currentProjectFile
-                    .getFileNameWithoutExtension()
-                + ".autosave.sonoforge"
-            );
+        const auto baseName =
+            currentProjectFile.getFileNameWithoutExtension();
+
+        current = currentProjectFile.getSiblingFile(
+            baseName + ".autosave" + projectExtension
+        );
+        legacy = currentProjectFile.getSiblingFile(
+            baseName + ".autosave" + legacyProjectExtension
+        );
+    }
+    else
+    {
+        const auto directory = juce::File::getSpecialLocation(
+            juce::File::userApplicationDataDirectory
+        )
+            .getChildFile("SonoForge")
+            .getChildFile("Autosave");
+
+        current = directory.getChildFile(
+            juce::String("Recovery.autosave") + projectExtension
+        );
+        legacy = directory.getChildFile(
+            juce::String("Recovery.autosave") + legacyProjectExtension
+        );
     }
 
-    return juce::File::getSpecialLocation(
-        juce::File::userApplicationDataDirectory
-    )
-        .getChildFile("SonoForge")
-        .getChildFile("Autosave")
-        .getChildFile("Recovery.autosave.sonoforge");
+    // An autosave left by an older version is the only copy of unsaved work
+    // after a crash: carry it over so recovery keeps finding it.
+    if (legacy.existsAsFile() && ! current.existsAsFile())
+        legacy.moveFileTo(current);
+
+    return current;
 }
 
 juce::File MainComponent::getBackupFile(
@@ -1255,7 +1697,7 @@ juce::File MainComponent::getBackupFile(
 {
     return projectFile.getSiblingFile(
         projectFile.getFileNameWithoutExtension()
-        + ".backup.sonoforge"
+        + ".backup" + projectExtension
     );
 }
 
@@ -1371,7 +1813,7 @@ juce::var MainComponent::serialiseSnapshot(
 
     root->setProperty("format", "SonoForgeProject");
     root->setProperty("formatVersion", 2);
-    root->setProperty("appVersion", "0.9.0");
+    root->setProperty("appVersion", "0.9.1");
     root->setProperty(
         "positionSeconds",
         snapshot.positionSeconds
@@ -1696,7 +2138,7 @@ juce::Result MainComponent::deserialiseSnapshot(
 
 void MainComponent::updateProjectTitle()
 {
-    auto text = juce::String("SonoForge Studio 0.9.0");
+    auto text = juce::String("SonoForge Studio 0.9.1");
 
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
@@ -1898,6 +2340,23 @@ TrackRowComponent* MainComponent::addTrackRow(
         {
             selectRow(requestedRow);
         };
+
+    // Right-click clip menu: same operations as the toolbar buttons, but the
+    // cut position can be the pointer instead of the playhead.
+    row->onSplitRequested = [this, row](const double seconds)
+    {
+        splitClipAt(*row, seconds);
+    };
+
+    row->onDuplicateRequested = [this]
+    {
+        duplicateSelectedClip();
+    };
+
+    row->onDeleteRequested = [this]
+    {
+        deleteSelectedClip();
+    };
 
     row->setSnapSettings(
         snapButton.getToggleState(),
@@ -2194,14 +2653,25 @@ void MainComponent::splitSelectedClip()
     if (selectedRow == nullptr)
         return;
 
+    splitClipAt(
+        *selectedRow,
+        audioEngine.getPositionSeconds()
+    );
+}
+
+void MainComponent::splitClipAt(
+    TrackRowComponent& row,
+    const double projectSeconds
+)
+{
     const auto before = captureSnapshot();
 
     AudioTrack* rightTrack = nullptr;
 
     const auto result =
         audioEngine.splitTrackAtProjectPosition(
-            selectedRow->getTrack(),
-            audioEngine.getPositionSeconds(),
+            row.getTrack(),
+            projectSeconds,
             rightTrack
         );
 
