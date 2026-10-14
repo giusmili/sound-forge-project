@@ -19,6 +19,7 @@ public:
         float pan = 0.0f;
         bool muted = false;
         bool solo = false;
+        EffectsSettings effects;
     };
 
     struct MidiTrackState
@@ -27,6 +28,7 @@ public:
         float gain = 0.8f;
         bool muted = false;
         int instrumentId = 1;
+        EffectsSettings effects;
     };
 
     AudioEngine();

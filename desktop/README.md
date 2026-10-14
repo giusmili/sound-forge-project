@@ -27,6 +27,27 @@ Une tranche Master affiche le niveau de sortie et controle le gain general.
 
 Les reglages du mixer et ceux des lignes de pistes pilotent les memes objets audio. Une modification faite dans le mixer est donc immediatement appliquee au moteur audio et synchronisee avec l'interface principale.
 
+## Effets audio
+
+Chaque tranche du mixer (piste audio ou MIDI / Instrument) possede un bouton FX. Il ouvre un panneau d'effets pour cette piste. Le bouton FX est colore des qu'au moins un effet est actif.
+
+Les six effets sont chaines dans cet ordre, avant le fader et le panoramique :
+
+| Effet | Reglages |
+|---|---|
+| Filtre | passe-bas / passe-haut, frequence, resonance |
+| Distorsion | gain, mix |
+| Chorus | vitesse, profondeur, mix |
+| Delay | temps (1 a 2000 ms), feedback, mix |
+| Echo | temps, feedback, tonalite, mix (repetitions ping-pong qui s'assombrissent) |
+| Reverb | taille, amorti, mix |
+
+Double-clic sur un bouton rotatif pour revenir a sa valeur par defaut.
+
+Les effets sont enregistres dans le projet (`effects` par piste). Les projets plus anciens se chargent sans effet actif. Les queues de reverb et de delay continuent de sonner apres la fin d'une note ou pendant la pause, et sont coupees par Mute / Solo.
+
+Limites de cette premiere version : pas d'effet sur le Master, pas de synchronisation des delays au BPM, distorsion sans suréchantillonnage, et les reglages d'effets ne sont pas dans l'historique Annuler / Retablir (comme les faders du mixer).
+
 ## Fermeture et menus
 
 SonoForge dispose maintenant d'une barre de menus standard :

@@ -21,6 +21,7 @@ void MidiInstrumentTrack::prepareToPlay(
     synthesiser.setCurrentPlaybackSampleRate(
         sampleRate
     );
+    effects.prepare(sampleRate);
 }
 
 void MidiInstrumentTrack::releaseResources()
@@ -42,12 +43,28 @@ void MidiInstrumentTrack::getNextAudioBlock(
     if (muted.load())
     {
         peakLevel.store(0.0f);
+
+        if (! effectsSilenced)
+        {
+            effects.reset();
+            effectsSilenced = true;
+        }
+
         return;
     }
+
+    effectsSilenced = false;
 
     synthesiser.renderNextBlock(
         *bufferToFill.buffer,
         emptyMidiBuffer,
+        bufferToFill.startSample,
+        bufferToFill.numSamples
+    );
+
+    // Inserts run before the fader, on the synth output.
+    effects.process(
+        *bufferToFill.buffer,
         bufferToFill.startSample,
         bufferToFill.numSamples
     );
@@ -154,6 +171,16 @@ MidiInstrumentTrack::getName() const noexcept
 int MidiInstrumentTrack::getInstrumentId() const noexcept
 {
     return 1;
+}
+
+TrackEffects& MidiInstrumentTrack::getEffects() noexcept
+{
+    return effects;
+}
+
+const TrackEffects& MidiInstrumentTrack::getEffects() const noexcept
+{
+    return effects;
 }
 
 bool MidiInstrumentTrack::BasicSynthVoice::canPlaySound(

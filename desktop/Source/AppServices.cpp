@@ -35,7 +35,7 @@ void AppServices::initialise(const juce::File& overrideDirectory)
         getLogFile(), "SonoForge Studio diagnostic log", 256 * 1024);
 
     juce::Logger::setCurrentLogger(logger.get());
-    log("SonoForge Studio 0.8.2 starting");
+    log("SonoForge Studio 0.9.0 starting");
     log("Data directory: " + dataDirectory.getFullPathName());
     saveSettings(loadSettings());
 }

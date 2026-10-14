@@ -279,6 +279,9 @@ juce::Result AudioEngine::duplicateTrack(
     createdTrack->setPan(sourceTrack.getPan());
     createdTrack->setMuted(sourceTrack.isMuted());
     createdTrack->setSolo(sourceTrack.isSolo());
+    createdTrack->getEffects().apply(
+        sourceTrack.getEffects().getSettings()
+    );
 
     refreshSoloState();
     refreshTrackAlignment();
@@ -343,6 +346,9 @@ juce::Result AudioEngine::splitTrackAtProjectPosition(
     rightTrack->setPan(sourceTrack.getPan());
     rightTrack->setMuted(sourceTrack.isMuted());
     rightTrack->setSolo(sourceTrack.isSolo());
+    rightTrack->getEffects().apply(
+        sourceTrack.getEffects().getSettings()
+    );
 
     sourceTrack.setSourceRange(
         sourceTrack.getSourceStartSeconds(),
@@ -473,6 +479,7 @@ AudioEngine::captureTrackStates() const
         state.pan = track->getPan();
         state.muted = track->isMuted();
         state.solo = track->isSolo();
+        state.effects = track->getEffects().getSettings();
 
         states.push_back(std::move(state));
     }
@@ -496,6 +503,7 @@ AudioEngine::captureMidiTrackStates() const
         state.muted = track->isMuted();
         state.instrumentId =
             track->getInstrumentId();
+        state.effects = track->getEffects().getSettings();
 
         states.push_back(std::move(state));
     }
@@ -552,6 +560,7 @@ juce::Result AudioEngine::restoreProjectTracks(
         track->setPan(state.pan);
         track->setMuted(state.muted);
         track->setSolo(state.solo);
+        track->getEffects().apply(state.effects);
 
         rebuiltTracks.push_back(std::move(track));
     }
@@ -570,6 +579,7 @@ juce::Result AudioEngine::restoreProjectTracks(
 
         track->setGain(state.gain);
         track->setMuted(state.muted);
+        track->getEffects().apply(state.effects);
 
         rebuiltMidiTracks.push_back(
             std::move(track)

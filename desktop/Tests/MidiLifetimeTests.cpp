@@ -102,6 +102,67 @@ public:
                 "Project reload lost volume");
         require(app.midiTrackRows[0]->getTrack().isMuted(), "Project reload lost mute");
         require(app.trackRows.size() == 1, "Project reload lost WAV track");
+
+        // Effects: unsaved-change detection, project persistence and rendering.
+        {
+            const auto fingerprintBefore = app.makeSnapshotFingerprint(app.captureSnapshot());
+            auto& effects = app.midiTrackRows[0]->getTrack().getEffects();
+            effects.setParam(fx::delayOn, 1.0f);
+            effects.setParam(fx::delayTime, 333.0f);
+            effects.setParam(fx::delayFeedback, 0.0f);
+            effects.setParam(fx::delayMix, 0.5f);
+            effects.setParam(fx::reverbSize, 0.77f);
+            require(app.makeSnapshotFingerprint(app.captureSnapshot()) != fingerprintBefore,
+                    "Effect change not detected as a project change");
+
+            juce::TemporaryFile effectsProject(".sonoforge");
+            require(app.writeSnapshotFile(effectsProject.getFile(), app.captureSnapshot()),
+                    "Project with effects failed to save");
+            effects.setParam(fx::delayOn, 0.0f);
+            effects.setParam(fx::delayTime, 50.0f);
+            require(app.loadProjectFile(effectsProject.getFile(), false),
+                    "Project with effects failed to reload");
+
+            auto& restored = app.midiTrackRows[0]->getTrack().getEffects();
+            require(restored.getParam(fx::delayOn) >= 0.5f, "Reload lost delay enable");
+            require(std::abs(restored.getParam(fx::delayTime) - 333.0f) < 0.01f,
+                    "Reload lost delay time");
+            require(std::abs(restored.getParam(fx::reverbSize) - 0.77f) < 0.001f,
+                    "Reload lost reverb size");
+
+            // The delayed copy must be audible after the note has ended.
+            auto& synth = app.midiTrackRows[0]->getTrack();
+            synth.setMuted(false);
+            synth.setGain(0.8f);
+            synth.noteOn(69, 1.0f);
+
+            juce::AudioBuffer<float> rendered(2, 24000);
+            int written = 0;
+
+            while (written < rendered.getNumSamples())
+            {
+                const auto count = juce::jmin(256, rendered.getNumSamples() - written);
+                juce::AudioBuffer<float> block(2, count);
+                block.clear();
+                app.audioEngine.getNextAudioBlock({ &block, 0, count });
+
+                for (int channel = 0; channel < 2; ++channel)
+                    rendered.copyFrom(channel, written, block, channel, 0, count);
+
+                written += count;
+
+                if (written >= 512)
+                    synth.noteOff(69);
+            }
+
+            require(rendered.getMagnitude(0, 8000, 1000) < 0.0001f,
+                    "Audio between the note and its first repeat");
+            require(rendered.getMagnitude(0, 16100, 1000) > 0.001f,
+                    "Delay repeat not audible through the track chain");
+            require(rendered.getMagnitude(0, 0, 24000) <= 1.5f, "Rendered level out of range");
+            synth.setMuted(true);
+        }
+
         auto invalid = app.captureSnapshot();
         AudioEngine::TrackState missing;
         missing.sourceFile = juce::File::getSpecialLocation(juce::File::tempDirectory)

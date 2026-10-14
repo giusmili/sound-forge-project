@@ -1,5 +1,7 @@
 #include "MixerPanelComponent.h"
 
+#include "EffectsEditorComponent.h"
+
 namespace
 {
 constexpr auto panelColour = 0xff15191f;
@@ -52,6 +54,47 @@ void drawMeter(
 
     graphics.setColour(colour);
     graphics.fillRoundedRectangle(fill.toFloat(), 1.5f);
+}
+
+void showEffectsEditor(
+    juce::Component& anchor,
+    TrackEffects& effects,
+    const juce::String& trackName,
+    std::function<void()> changed,
+    juce::Component::SafePointer<juce::CallOutBox>& openBox
+)
+{
+    if (openBox != nullptr)
+    {
+        openBox->dismiss();
+        openBox = nullptr;
+        return;
+    }
+
+    auto editor = std::make_unique<EffectsEditorComponent>(
+        effects,
+        trackName,
+        std::move(changed)
+    );
+
+    openBox = &juce::CallOutBox::launchAsynchronously(
+        std::move(editor),
+        anchor.getScreenBounds(),
+        nullptr
+    );
+}
+
+void refreshEffectsButton(
+    juce::TextButton& button,
+    const bool hasActiveEffect
+)
+{
+    button.setColour(
+        juce::TextButton::buttonColourId,
+        hasActiveEffect
+            ? juce::Colour(audioAccentColour)
+            : juce::Colour(stripColour).brighter(0.16f)
+    );
 }
 
 class AudioMixerStrip final
@@ -121,6 +164,19 @@ public:
         };
         addAndMakeVisible(soloButton);
 
+        fxButton.setTooltip("Effets : reverb, delay, echo, chorus...");
+        fxButton.onClick = [this]
+        {
+            showEffectsEditor(
+                fxButton,
+                track.getEffects(),
+                track.getName(),
+                changed,
+                effectsBox
+            );
+        };
+        addAndMakeVisible(fxButton);
+
         refreshButtons();
         startTimerHz(30);
     }
@@ -128,6 +184,10 @@ public:
     ~AudioMixerStrip() override
     {
         stopTimer();
+
+        // The editor references this track's effects.
+        if (effectsBox != nullptr)
+            effectsBox->dismiss();
     }
 
     void paint(juce::Graphics& graphics) override
@@ -152,6 +212,8 @@ public:
         );
         soloButton.setBounds(buttons.reduced(2));
 
+        fxButton.setBounds(area.removeFromBottom(27).reduced(2));
+
         auto panArea = area.removeFromBottom(62);
         panSlider.setBounds(panArea.withSizeKeepingCentre(58, 58));
 
@@ -170,6 +232,11 @@ private:
 
     void refreshButtons()
     {
+        refreshEffectsButton(
+            fxButton,
+            track.getEffects().hasActiveEffect()
+        );
+
         muteButton.setColour(
             juce::TextButton::buttonColourId,
             track.isMuted()
@@ -199,6 +266,8 @@ private:
     juce::Slider panSlider;
     juce::TextButton muteButton { "M" };
     juce::TextButton soloButton { "S" };
+    juce::TextButton fxButton { "FX" };
+    juce::Component::SafePointer<juce::CallOutBox> effectsBox;
     juce::Rectangle<int> meterBounds;
 };
 
@@ -255,6 +324,19 @@ public:
         };
         addAndMakeVisible(muteButton);
 
+        fxButton.setTooltip("Effets : reverb, delay, echo, chorus...");
+        fxButton.onClick = [this]
+        {
+            showEffectsEditor(
+                fxButton,
+                track.getEffects(),
+                track.getName(),
+                changed,
+                effectsBox
+            );
+        };
+        addAndMakeVisible(fxButton);
+
         refreshMuteButton();
         startTimerHz(30);
     }
@@ -262,6 +344,10 @@ public:
     ~MidiMixerStrip() override
     {
         stopTimer();
+
+        // The editor references this track's effects.
+        if (effectsBox != nullptr)
+            effectsBox->dismiss();
     }
 
     void paint(juce::Graphics& graphics) override
@@ -281,6 +367,7 @@ public:
         typeLabel.setBounds(area.removeFromTop(14));
         instrumentLabel.setBounds(area.removeFromBottom(18));
         muteButton.setBounds(area.removeFromBottom(28).reduced(2));
+        fxButton.setBounds(area.removeFromBottom(27).reduced(2));
 
         meterBounds = area.removeFromRight(14).reduced(2, 7);
         gainSlider.setBounds(area.reduced(3, 0));
@@ -296,6 +383,11 @@ private:
 
     void refreshMuteButton()
     {
+        refreshEffectsButton(
+            fxButton,
+            track.getEffects().hasActiveEffect()
+        );
+
         muteButton.setColour(
             juce::TextButton::buttonColourId,
             track.isMuted()
@@ -317,6 +409,8 @@ private:
     juce::Label instrumentLabel;
     juce::Slider gainSlider;
     juce::TextButton muteButton { "M" };
+    juce::TextButton fxButton { "FX" };
+    juce::Component::SafePointer<juce::CallOutBox> effectsBox;
     juce::Rectangle<int> meterBounds;
 };
 

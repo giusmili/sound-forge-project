@@ -2,6 +2,8 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
+#include "TrackEffects.h"
+
 class AudioTrack final : public juce::AudioSource
 {
 public:
@@ -45,11 +47,16 @@ public:
     [[nodiscard]] const juce::String& getName() const noexcept;
     [[nodiscard]] const juce::File& getSourceFile() const noexcept;
 
+    [[nodiscard]] TrackEffects& getEffects() noexcept;
+    [[nodiscard]] const TrackEffects& getEffects() const noexcept;
+
 private:
     juce::File file;
     juce::String name;
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
     juce::AudioTransportSource transport;
+    TrackEffects effects;
+    bool effectsSilenced = false;
 
     std::atomic<float> gain { 1.0f };
     std::atomic<float> pan { 0.0f };

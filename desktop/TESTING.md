@@ -1,4 +1,4 @@
-# SonoForge Studio 0.8.2 - Guide de test Windows
+# SonoForge Studio 0.9.0 - Guide de test Windows
 
 ## Deplacement de la fenetre 0.8.2
 
@@ -110,3 +110,12 @@ Cette version valide le type de piste instrument et le routage sonore. Elle ne c
 - VST3
 
 Ces fonctions arrivent sur cette base.
+
+## Effets audio 0.9.0
+
+- Ouvrir le Mixer, cliquer FX sur une piste : le panneau d'effets s'ouvre.
+- Activer Reverb, Delay ou Echo sur une piste MIDI et jouer Tester C4 : une queue doit etre audible apres la note.
+- Le bouton FX reste colore tant qu'un effet est actif ; Mute coupe les queues.
+- Enregistrer, rouvrir le projet : les reglages d'effets sont conserves.
+- Ouvrir un projet cree avant 0.9.0 : aucun effet actif, aucun message d'erreur.
+- ctest -C Release : MidiLifetime et EffectsDsp doivent passer.

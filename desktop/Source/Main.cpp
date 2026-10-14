@@ -15,7 +15,7 @@ public:
 
     const juce::String getApplicationVersion() override
     {
-        return "0.8.2";
+        return "0.9.0";
     }
 
     bool moreThanOneInstanceAllowed() override
@@ -36,7 +36,7 @@ public:
             }
         );
         juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel);
-        AppServices::log("Creating SonoForge 0.8.2 main window");
+        AppServices::log("Creating SonoForge 0.9.0 main window");
         mainWindow =
             std::make_unique<MainWindow>(
                 getApplicationName()

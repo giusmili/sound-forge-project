@@ -37,6 +37,7 @@ void AudioTrack::prepareToPlay(
 )
 {
     transport.prepareToPlay(samplesPerBlockExpected, sampleRate);
+    effects.prepare(sampleRate);
 }
 
 void AudioTrack::releaseResources()
@@ -54,8 +55,25 @@ void AudioTrack::getNextAudioBlock(
     {
         peakLevel.store(0.0f);
         bufferToFill.clearActiveBufferRegion();
+
+        // Drop any reverb/delay tail so it does not replay on unmute.
+        if (! effectsSilenced)
+        {
+            effects.reset();
+            effectsSilenced = true;
+        }
+
         return;
     }
+
+    effectsSilenced = false;
+
+    // Inserts run before the fader and pan so the wet signal follows them.
+    effects.process(
+        *bufferToFill.buffer,
+        bufferToFill.startSample,
+        bufferToFill.numSamples
+    );
 
     const auto currentGain = juce::jmax(0.0f, gain.load());
     const auto currentPan = juce::jlimit(-1.0f, 1.0f, pan.load());
@@ -301,4 +319,14 @@ const juce::String& AudioTrack::getName() const noexcept
 const juce::File& AudioTrack::getSourceFile() const noexcept
 {
     return file;
+}
+
+TrackEffects& AudioTrack::getEffects() noexcept
+{
+    return effects;
+}
+
+const TrackEffects& AudioTrack::getEffects() const noexcept
+{
+    return effects;
 }

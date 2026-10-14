@@ -35,7 +35,7 @@ try {
             [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
             [System.Windows.Automation.ControlType]::Text)
         $heading = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition) |
-            Where-Object { $_.Current.Name -like 'SonoForge Studio 0.8.2*' } | Select-Object -First 1
+            Where-Object { $_.Current.Name -like 'SonoForge Studio 0.9.0*' } | Select-Object -First 1
         if ($null -eq $heading) { throw 'Heading not found' }
         return $heading.Current.BoundingRectangle
     }

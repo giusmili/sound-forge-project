@@ -38,7 +38,7 @@ MainComponent::MainComponent()
     addAndMakeVisible(menuBar);
 
     titleLabel.setText(
-        "SonoForge Studio 0.8.2",
+        "SonoForge Studio 0.9.0",
         juce::dontSendNotification
     );
     titleLabel.setFont(
@@ -1371,7 +1371,7 @@ juce::var MainComponent::serialiseSnapshot(
 
     root->setProperty("format", "SonoForgeProject");
     root->setProperty("formatVersion", 2);
-    root->setProperty("appVersion", "0.8.2");
+    root->setProperty("appVersion", "0.9.0");
     root->setProperty(
         "positionSeconds",
         snapshot.positionSeconds
@@ -1423,6 +1423,7 @@ juce::var MainComponent::serialiseSnapshot(
         track->setProperty("pan", state.pan);
         track->setProperty("muted", state.muted);
         track->setProperty("solo", state.solo);
+        track->setProperty("effects", state.effects.toVar());
 
         tracks.add(juce::var(track));
     }
@@ -1445,6 +1446,7 @@ juce::var MainComponent::serialiseSnapshot(
             "instrumentId",
             state.instrumentId
         );
+        track->setProperty("effects", state.effects.toVar());
 
         midiTracks.add(juce::var(track));
     }
@@ -1620,6 +1622,10 @@ juce::Result MainComponent::deserialiseSnapshot(
             static_cast<bool>(
                 track->getProperty("solo")
             );
+        // Absent in projects saved before effects existed: defaults apply.
+        state.effects = EffectsSettings::fromVar(
+            track->getProperty("effects")
+        );
 
         snapshot.tracks.push_back(
             std::move(state)
@@ -1674,6 +1680,9 @@ juce::Result MainComponent::deserialiseSnapshot(
                             "instrumentId"
                         )
                     );
+                state.effects = EffectsSettings::fromVar(
+                    track->getProperty("effects")
+                );
 
                 snapshot.midiTracks.push_back(
                     std::move(state)
@@ -1687,7 +1696,7 @@ juce::Result MainComponent::deserialiseSnapshot(
 
 void MainComponent::updateProjectTitle()
 {
-    auto text = juce::String("SonoForge Studio 0.8.2");
+    auto text = juce::String("SonoForge Studio 0.9.0");
 
     if (currentProjectFile.getFullPathName().isNotEmpty())
     {
@@ -1734,7 +1743,8 @@ juce::String MainComponent::makeSnapshotFingerprint(
             << "|gain=" << juce::String(state.gain, 6)
             << "|pan=" << juce::String(state.pan, 6)
             << "|mute=" << juce::String(state.muted ? 1 : 0)
-            << "|solo=" << juce::String(state.solo ? 1 : 0);
+            << "|solo=" << juce::String(state.solo ? 1 : 0)
+            << "|fx=" << state.effects.fingerprint();
     }
 
     for (const auto& state : snapshot.midiTracks)
@@ -1743,7 +1753,8 @@ juce::String MainComponent::makeSnapshotFingerprint(
             << "|midiName=" << state.name
             << "|midiGain=" << juce::String(state.gain, 6)
             << "|midiMute=" << juce::String(state.muted ? 1 : 0)
-            << "|instrument=" << juce::String(state.instrumentId);
+            << "|instrument=" << juce::String(state.instrumentId)
+            << "|midiFx=" << state.effects.fingerprint();
     }
 
     return fingerprint;

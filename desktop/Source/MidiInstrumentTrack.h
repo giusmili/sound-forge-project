@@ -2,6 +2,8 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
+#include "TrackEffects.h"
+
 class MidiInstrumentTrack final : public juce::AudioSource
 {
 public:
@@ -31,6 +33,9 @@ public:
     [[nodiscard]] bool isMuted() const noexcept;
     [[nodiscard]] const juce::String& getName() const noexcept;
     [[nodiscard]] int getInstrumentId() const noexcept;
+
+    [[nodiscard]] TrackEffects& getEffects() noexcept;
+    [[nodiscard]] const TrackEffects& getEffects() const noexcept;
 
 private:
     class BasicSynthSound final
@@ -87,6 +92,8 @@ private:
     juce::String name;
     juce::Synthesiser synthesiser;
     juce::MidiBuffer emptyMidiBuffer;
+    TrackEffects effects;
+    bool effectsSilenced = false;
 
     std::atomic<float> gain { 0.8f };
     std::atomic<float> peakLevel { 0.0f };

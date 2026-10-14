@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(SonoForgeStudio VERSION 0.8.2 LANGUAGES C CXX)
+project(SonoForgeStudio VERSION 0.9.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,6 +37,10 @@ target_sources(SonoForge
         Source/AudioEngine.h
         Source/AudioTrack.cpp
         Source/AudioTrack.h
+        Source/TrackEffects.cpp
+        Source/TrackEffects.h
+        Source/EffectsEditorComponent.cpp
+        Source/EffectsEditorComponent.h
         Source/MidiInstrumentTrack.cpp
         Source/MidiInstrumentTrack.h
         Source/MidiTrackRowComponent.cpp
@@ -76,4 +80,16 @@ if(BUILD_TESTING)
         juce::juce_audio_utils juce::juce_audio_formats juce::juce_gui_extra
         juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     add_test(NAME MidiLifetime COMMAND SonoForgeTests)
+
+    # DSP-only tests: no audio device, no GUI, runs in well under a second.
+    juce_add_console_app(SonoForgeEffectsTests PRODUCT_NAME "SonoForge Effects Tests")
+    target_sources(SonoForgeEffectsTests PRIVATE
+        Source/TrackEffects.cpp
+        Source/TrackEffects.h
+        Tests/EffectsTests.cpp)
+    target_compile_definitions(SonoForgeEffectsTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(SonoForgeEffectsTests PRIVATE
+        juce::juce_audio_utils
+        juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+    add_test(NAME EffectsDsp COMMAND SonoForgeEffectsTests)
 endif()
